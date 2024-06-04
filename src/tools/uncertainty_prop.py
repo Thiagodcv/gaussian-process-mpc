@@ -114,7 +114,7 @@ def variance_prop(K, Lambda, u, S, X_train, y_train):
     beta = params['beta']
     l = params['l']
 
-    num_train = X_train[0]
+    num_train = X_train.shape[0]
     d = S.shape[0]
     L = np.zeros((num_train, num_train))
     half_Lam_S_inv = np.linalg.inv(Lambda / 2 + S)
@@ -129,5 +129,50 @@ def variance_prop(K, Lambda, u, S, X_train, y_train):
             L[i, j] = det_part * exp_part
 
     K_inv = np.linalg.inv(K)
-    return 1 - np.trace((K_inv - beta @ beta.T) @ L) - mean**2
+    return 1 - np.trace((K_inv - np.outer(beta, beta)) @ L) - mean**2
 
+
+def variance_prop_mc(K, Lambda, u, S, X_train, y_train):
+    """
+    Computes the variance of predictive distribution (21) using Monte Carlo.
+    Assumes we are using Gaussian kernels.
+
+    Parameters:
+    ----------
+    K: np.array
+       Evidence covariance matrix
+    Lambda: np.array
+       Diagonal matrix containing kernel parameters
+    u: np.array
+       Mean of input distribution (which is assumed to be Gaussian)
+    S: np.array
+       Covariance of input distribution (which is assumed to be Gaussian)
+    X_train: np.array
+       GP training data inputs
+    y_train: scalar
+       GP training data outputs
+
+    Return :
+    ------
+    scalar
+       Variance of predictive distribution of f
+    """
+    def gauss_kern(x1, x2):
+        return np.exp(-1/2 * (x1-x2).T @ np.linalg.inv(Lambda) @ (x1-x2))
+
+    T = 10000
+    X_star = np.random.multivariate_normal(u, S, size=T)
+
+    num_train = K.shape[0]
+    K_inv = np.linalg.inv(K)
+    mu_list = []
+    sig_sq_list = []
+    for t in range(T):
+        k_vec = np.array([gauss_kern(X_star[t, :], X_train[n, :]) for n in range(num_train)])
+        mu = k_vec.T @ K_inv @ y_train
+        sig_sq = 1 - k_vec.T @ K_inv @ k_vec
+
+        mu_list.append(mu)
+        sig_sq_list.append(sig_sq)
+
+    return np.mean(sig_sq_list) + np.var(mu_list)
