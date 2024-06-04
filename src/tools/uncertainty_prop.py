@@ -68,7 +68,7 @@ def mean_prop_mc(K, Lambda, u, S, X_train, y_train):
     def gauss_kern(x1, x2):
         return np.exp(-1/2 * (x1-x2).T @ np.linalg.inv(Lambda) @ (x1-x2))
 
-    T = 100
+    T = 10000
     X_star = np.random.multivariate_normal(u, S, size=T)
 
     num_train = K.shape[0]
