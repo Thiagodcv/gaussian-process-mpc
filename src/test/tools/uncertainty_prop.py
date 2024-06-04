@@ -54,7 +54,7 @@ class TestUncertaintyProp(TestCase):
         self.assertTrue(np.linalg.norm(K-K.T) < 1e-5)
         self.assertEqual(K.shape, (num_train, num_train))
 
-        analytical_mu = mean_prop(K, Lambda, u, S, X_train, y_train)
+        analytical_mu, _ = mean_prop(K, Lambda, u, S, X_train, y_train)
         print(analytical_mu)
 
         mc_mu = mean_prop_mc(K, Lambda, u, S, X_train, y_train)

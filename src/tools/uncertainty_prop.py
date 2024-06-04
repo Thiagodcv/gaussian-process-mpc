@@ -26,6 +26,8 @@ def mean_prop(K, Lambda, u, S, X_train, y_train):
     ------
     scalar
         Mean of predictive distribution of f
+    dict
+        Dictionary containing beta and l (equation 31)
     """
     beta = scipy.linalg.solve(K, y_train)
     Lambda_inv = np.linalg.inv(Lambda)
@@ -37,7 +39,7 @@ def mean_prop(K, Lambda, u, S, X_train, y_train):
         gauss_cov = (u - X_train[j, :]).T @ S_Lambda_inv @ (u - X_train[j, :])
         l[j] = (np.linalg.det(Lambda_inv @ S + np.identity(d)) ** (-1/2)) * np.exp(-1/2 * gauss_cov)
 
-    return np.dot(beta, l)
+    return np.dot(beta, l), {'beta': beta, 'l': l}
 
 
 def mean_prop_mc(K, Lambda, u, S, X_train, y_train):
@@ -80,3 +82,52 @@ def mean_prop_mc(K, Lambda, u, S, X_train, y_train):
         m_est += mu
 
     return m_est / T
+
+
+def variance_prop(K, Lambda, u, S, X_train, y_train):
+    """
+    Computes the variance of predictive distribution (21) using an exact formula.
+    Assumes we are using Gaussian kernels.
+
+    Parameters:
+    ----------
+    K: np.array
+       Evidence covariance matrix
+    Lambda: np.array
+       Diagonal matrix containing kernel parameters
+    u: np.array
+       Mean of input distribution (which is assumed to be Gaussian)
+    S: np.array
+       Covariance of input distribution (which is assumed to be Gaussian)
+    X_train: np.array
+       GP training data inputs
+    y_train: scalar
+       GP training data outputs
+
+    Return :
+    ------
+    scalar
+       Variance of predictive distribution of f
+    """
+
+    mean, params = mean_prop(K, Lambda, u, S, X_train, y_train)
+    beta = params['beta']
+    l = params['l']
+
+    num_train = X_train[0]
+    d = S.shape[0]
+    L = np.zeros((num_train, num_train))
+    half_Lam_S_inv = np.linalg.inv(Lambda / 2 + S)
+    Lam_inv = np.linalg.inv(Lambda)
+    det_part = np.linalg.det(2 * Lam_inv @ S + np.identity(d)) ** (-1/2)
+    for i in range(num_train):
+        for j in range(num_train):
+            x_d = (X_train[i, :] + X_train[j, :]) / 2
+            exp_part = np.exp(-1/2 * (u - x_d).T @ half_Lam_S_inv @ (u - x_d) +
+                              -1/4 * (X_train[i, :] - X_train[j, :]).T @ Lam_inv @ (X_train[i, :] - X_train[j, :]))
+
+            L[i, j] = det_part * exp_part
+
+    K_inv = np.linalg.inv(K)
+    return 1 - np.trace((K_inv - beta @ beta.T) @ L) - mean**2
+
