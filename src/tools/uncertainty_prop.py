@@ -204,10 +204,10 @@ def covariance_prop(K1, K2, Lambda1, Lambda2, u, S, X_train, y_train):
        Covariance of joint predictive distribution of f1 and f2
     """
     mean1, params1 = mean_prop(K1, Lambda1, u, S, X_train, y_train)
-    beta1, _ = params1['beta']
+    beta1 = params1['beta']
 
     mean2, params2 = mean_prop(K2, Lambda2, u, S, X_train, y_train)
-    beta2, _ = params2['beta']
+    beta2 = params2['beta']
 
     Lambda1_inv = np.linalg.inv(Lambda1)
     Lambda2_inv = np.linalg.inv(Lambda2)
@@ -281,4 +281,4 @@ def covariance_prop_mc(K1, K2, Lambda1, Lambda2, u, S, X_train, y_train):
         f1_list.append(f1)
         f2_list.append(f2)
 
-    return np.cov(np.array([f1_list, f2_list]))[0, 1]
+    return np.cov(f1_list, f2_list)  # [0,1]
