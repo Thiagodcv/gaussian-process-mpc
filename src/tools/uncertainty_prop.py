@@ -176,3 +176,56 @@ def variance_prop_mc(K, Lambda, u, S, X_train, y_train):
         sig_sq_list.append(sig_sq)
 
     return np.mean(sig_sq_list) + np.var(mu_list)
+
+
+def covariance_prop(K1, K2, Lambda1, Lambda2, u, S, X_train, y_train):
+    """
+    Computes the covariance of GP outputs (A14) using an exact formula.
+    Assumes we are using Gaussian kernels for both GP models 1 and 2.
+
+    Parameters:
+    ----------
+    K1 & K2: np.array
+       Evidence covariance matrix for GP models 1 and 2
+    Lambda1 & Lambda2: np.array
+       Diagonal matrix containing kernel parameters for GP models 1 and 2
+    u: np.array
+       Mean of input distribution (which is assumed to be Gaussian)
+    S: np.array
+       Covariance of input distribution (which is assumed to be Gaussian)
+    X_train: np.array
+       GP training data inputs
+    y_train: scalar
+       GP training data outputs
+
+    Return :
+    ------
+    scalar
+       Covariance of joint predictive distribution of f1 and f2
+    """
+    mean1, params1 = mean_prop(K1, Lambda1, u, S, X_train, y_train)
+    beta1, _ = params1['beta']
+
+    mean2, params2 = mean_prop(K2, Lambda2, u, S, X_train, y_train)
+    beta2, _ = params2['beta']
+
+    Lambda1_inv = np.linalg.inv(Lambda1)
+    Lambda2_inv = np.linalg.inv(Lambda2)
+
+    def gauss_kern(x1, x2, Lambda_inv):
+        return np.exp(-1/2 * (x1-x2).T @ Lambda_inv @ (x1-x2))
+
+    num_train = beta1.shape[0]
+    d = Lambda1.shape[0]
+    Q_tilde = np.zeros((num_train, num_train))
+    det_part = np.linalg.det(S @ (Lambda1_inv + Lambda2_inv) + np.identity(d)) ** (-1/2)
+    for i in range(num_train):
+        for j in range(num_train):
+            k1 = gauss_kern(X_train[i, :], u, Lambda1_inv)
+            k2 = gauss_kern(X_train[j, :], u, Lambda2_inv)
+            z = Lambda1_inv @ (X_train[i, :] - u) + Lambda2_inv @ (X_train[j, :] - u)
+            exp_part = (1/2 * z.T @ np.linalg.inv(S @ (Lambda1_inv + Lambda2_inv) + np.identity(d)) @ S @ z)
+            Q_tilde[i, j] = k1 * k2 * det_part * exp_part
+
+    return beta1.T @ Q_tilde @ beta2 - mean1 * mean2
+            
