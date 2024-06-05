@@ -228,4 +228,57 @@ def covariance_prop(K1, K2, Lambda1, Lambda2, u, S, X_train, y_train):
             Q_tilde[i, j] = k1 * k2 * det_part * exp_part
 
     return beta1.T @ Q_tilde @ beta2 - mean1 * mean2
-            
+
+
+def covariance_prop_mc(K1, K2, Lambda1, Lambda2, u, S, X_train, y_train):
+    """
+    Computes the covariance of GP outputs (A14) using Monte Carlo.
+    Assumes we are using Gaussian kernels for both GP models 1 and 2.
+
+    Parameters:
+    ----------
+    K1 & K2: np.array
+       Evidence covariance matrix for GP models 1 and 2
+    Lambda1 & Lambda2: np.array
+       Diagonal matrix containing kernel parameters for GP models 1 and 2
+    u: np.array
+       Mean of input distribution (which is assumed to be Gaussian)
+    S: np.array
+       Covariance of input distribution (which is assumed to be Gaussian)
+    X_train: np.array
+       GP training data inputs
+    y_train: scalar
+       GP training data outputs
+
+    Return :
+    ------
+    scalar
+       Covariance of joint predictive distribution of f1 and f2
+    """
+    K1_inv = np.linalg.inv(K1)
+    K2_inv = np.linalg.inv(K2)
+    Lambda1_inv = np.linalg.inv(Lambda1)
+    Lambda2_inv = np.linalg.inv(Lambda2)
+
+    def gauss_kern(x1, x2, Lambda_inv):
+        return np.exp(-1/2 * (x1-x2).T @ Lambda_inv @ (x1-x2))
+
+    T = 10000
+    X_star = np.random.multivariate_normal(u, S, size=T)
+
+    num_train = K1.shape[0]
+    f1_list = []
+    f2_list = []
+    for t in range(T):
+        k1_vec = np.array([gauss_kern(X_star[t, :], X_train[n, :], Lambda1_inv) for n in range(num_train)])
+        k2_vec = np.array([gauss_kern(X_star[t, :], X_train[n, :], Lambda2_inv) for n in range(num_train)])
+        mu1 = k1_vec @ K1_inv @ y_train
+        mu2 = k2_vec @ K2_inv @ y_train
+        sigma1 = np.sqrt(1 - k1_vec @ K1_inv @ k1_vec)
+        sigma2 = np.sqrt(1 - k2_vec @ K2_inv @ k2_vec)
+        f1 = np.random.normal(loc=mu1, scale=sigma1)
+        f2 = np.random.normal(loc=mu2, scale=sigma2)
+        f1_list.append(f1)
+        f2_list.append(f2)
+
+    return np.cov(np.array([f1_list, f2_list]))[0, 1]
