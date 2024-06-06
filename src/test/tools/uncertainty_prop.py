@@ -172,3 +172,6 @@ class TestUncertaintyProp(TestCase):
 
         mc_covar = covariance_prop_mc(K1, K2, Lambda1, Lambda2, u, S, X_train, y_train)
         print(mc_covar)
+
+        # True if difference is less than 2% of the average mean estimate
+        self.assertTrue(np.abs(analytical_covar - mc_covar) / ((analytical_covar + mc_covar) / 2) < 0.02)

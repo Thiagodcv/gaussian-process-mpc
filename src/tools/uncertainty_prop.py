@@ -224,7 +224,7 @@ def covariance_prop(K1, K2, Lambda1, Lambda2, u, S, X_train, y_train):
             k1 = gauss_kern(X_train[i, :], u, Lambda1_inv)
             k2 = gauss_kern(X_train[j, :], u, Lambda2_inv)
             z = Lambda1_inv @ (X_train[i, :] - u) + Lambda2_inv @ (X_train[j, :] - u)
-            exp_part = (1/2 * z.T @ np.linalg.inv(S @ (Lambda1_inv + Lambda2_inv) + np.identity(d)) @ S @ z)
+            exp_part = np.exp(1/2 * z.T @ np.linalg.inv(S @ (Lambda1_inv + Lambda2_inv) + np.identity(d)) @ S @ z)
             Q_tilde[i, j] = k1 * k2 * det_part * exp_part
 
     return beta1.T @ Q_tilde @ beta2 - mean1 * mean2
@@ -281,4 +281,4 @@ def covariance_prop_mc(K1, K2, Lambda1, Lambda2, u, S, X_train, y_train):
         f1_list.append(f1)
         f2_list.append(f2)
 
-    return np.cov(f1_list, f2_list)  # [0,1]
+    return np.cov(f1_list, f2_list)[0, 1]
