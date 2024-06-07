@@ -50,7 +50,7 @@ class hs071(object):
 
     def gradient(self, x):
         #
-        # The callback for calculating the gradient
+        # The callback for calculating the gradient of objective function
         #
         return np.array([
                     x[0] * x[3] + x[3] * np.sum(x[0:3]),
@@ -61,19 +61,21 @@ class hs071(object):
 
     def constraints(self, x):
         #
-        # The callback for calculating the constraints
+        # The callback for calculating the constraint functions
         #
         return np.array((np.prod(x), np.dot(x, x)))
 
     def jacobian(self, x):
         #
-        # The callback for calculating the Jacobian
+        # The callback for calculating the Jacobian of constraint functions
         #
         return np.concatenate((np.prod(x) / x, 2*x))
 
     def hessianstructure(self):
         #
-        # The structure of the Hessian
+        # Callback function that accepts no parameters and returns the sparsity structure
+        # of the Hessian of the lagrangian (the row and column indices only)
+        #
         # Note:
         # The default hessian structure is of a lower triangular matrix. Therefore
         # this function is redundant. I include it as an example for structure
@@ -87,7 +89,7 @@ class hs071(object):
 
     def hessian(self, x, lagrange, obj_factor):
         #
-        # The callback for calculating the Hessian
+        # The callback for calculating the Hessian of the Lagrangian
         #
         H = obj_factor*np.array((
                 (2*x[3], 0, 0, 0),
