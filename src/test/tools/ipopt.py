@@ -21,7 +21,7 @@ class TestIPOPT(TestCase):
         cl = [25.0, 40.0]
         cu = [2.0e19, 40.0]
 
-        nlp = cyipopt.problem(
+        nlp = cyipopt.Problem(
             n=len(x0),
             m=len(cl),
             problem_obj=hs071(),
@@ -31,8 +31,8 @@ class TestIPOPT(TestCase):
             cu=cu
         )
 
-        nlp.addOption('mu_strategy', 'adaptive')
-        nlp.addOption('tol', 1e-7)
+        nlp.add_option('mu_strategy', 'adaptive')
+        nlp.add_option('tol', 1e-7)
 
         x, info = nlp.solve(x0)
         print(x)  # Optimal solution should be (1.0, 4.743, 3.821, 1.379)
