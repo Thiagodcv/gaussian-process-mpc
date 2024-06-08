@@ -37,6 +37,7 @@ class TestIPOPT(TestCase):
         x, info = nlp.solve(x0)
         print(x)  # Optimal solution should be (1.0, 4.743, 3.821, 1.379)
 
+
 class hs071(object):
 
     def __init__(self):
