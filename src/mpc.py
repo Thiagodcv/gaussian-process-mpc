@@ -70,4 +70,3 @@ class RiskSensitiveMPC:
             cost += (u[j, :] - u_ref).T @ self.R @ (u[j, :] - u_ref)
 
         return cost
-    
