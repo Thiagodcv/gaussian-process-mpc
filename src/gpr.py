@@ -31,8 +31,8 @@ class GaussianProcessRegression(object):
 
         Parameters
         ----------
-        x: (x_dim) numpy array
-        y: (1, 1) numpy array
+        x: (x_dim, ) numpy array
+        y: scalar
         """
         x = np.reshape(x, (1, self.x_dim))
         y = np.reshape(y, (1, 1))

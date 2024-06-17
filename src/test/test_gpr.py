@@ -2,6 +2,8 @@ from unittest import TestCase
 import time
 import numpy as np
 from src.gpr import GaussianProcessRegression
+import torch
+import scipy.linalg.blas as blas
 
 
 class TestGaussianProcessRegression(TestCase):
@@ -28,16 +30,39 @@ class TestGaussianProcessRegression(TestCase):
             avg_time[i - 1] = avg_time[i - 1] / n_trials
         print(avg_time)
 
-    def test_nn_time(self):
-        start = time.time()
-        for i in range(100_000):
-            a = 5 * 5
-            a = 5 * 5
-            a = 5 * 5
-            if i == 5000:
-                print(i)
-        end = time.time()
-        print(end-start)
+    def test_pytorch_mat_mult(self):
+        # For multiplying two (10_000, 10_000) matrices, cuda+torch on average takes 0.8s (after first multiply)
+        # numpy on average takes 8.2s, and blas on average takes 6s.
+        A = torch.normal(mean=0, std=1, size=(10_000, 10_000), device='cuda')
+        B = torch.normal(mean=0, std=1, size=(10_000, 10_000), device='cuda')
+
+        for i in range(5):
+            torch.cuda.synchronize()
+            a = time.perf_counter()
+            y = A.mm(B.t())
+            torch.cuda.synchronize()  # wait for mm to finish
+            b = time.perf_counter()
+            print('Torch with CUDA {:.02e}s'.format(b - a))
+
+        A_np = A.cpu().detach().numpy()
+        B_np = B.cpu().detach().numpy()
+
+        for i in range(3):
+            a = time.time()
+            C_np = A_np @ B_np
+            b = time.time()
+            print('Numpy on CPU {:.02e}s'.format(b - a))
+
+        A_blas = np.array(A_np, order='F')
+        B_blas = np.array(B_np, order='F')
+
+        for i in range(3):
+            a = time.time()
+            C_blas = blas.sgemm(alpha=1., a=A_blas, b=B_blas)
+            b = time.time()
+            print('SciPy blas on CPU {:.02e}s'.format(b - a))
+
+        self.assertTrue(np.linalg.norm(C_np - C_blas) < 1e-5)
 
     def test_partition_inverse_formula(self):
         num_train = 3000
