@@ -40,7 +40,7 @@ class TestGaussianProcessRegression(TestCase):
         for i in range(5):
             torch.cuda.synchronize()
             a = time.perf_counter()
-            y = A.mm(B.t())
+            C_torch = torch.mm(A, B)
             torch.cuda.synchronize()  # wait for mm to finish
             b = time.perf_counter()
             print('Torch with CUDA {:.02e}s'.format(b - a))
