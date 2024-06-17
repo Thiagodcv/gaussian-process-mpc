@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 
 
 class GaussianProcessRegression(object):
@@ -8,6 +9,9 @@ class GaussianProcessRegression(object):
     """
 
     def __init__(self, x_dim):
+        # Device
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
         # Training data
         self.x_dim = x_dim
         self.num_train = 0
@@ -20,10 +24,10 @@ class GaussianProcessRegression(object):
         # Inverse of covariance matrix plus variance of noise "the A-inverse matrix"
         self.A_inv = None
 
-        # Hyperparameters
-        self.Lambda = np.identity(self.x_dim)
-        self.sigma_e = 1
-        self.sigma_f = 1
+        # Hyperparameters to update via backprop
+        self.Lambda = torch.ones(x_dim, requires_grad=True).type(torch.float32).to(self.device)
+        self.sigma_e = torch.tensor(1., requires_grad=True).type(torch.float32).to(self.device)
+        self.sigma_f = torch.tensor(1., requires_grad=True).type(torch.float32).to(self.device)
 
     def append_train_data(self, x, y):
         """
@@ -32,29 +36,33 @@ class GaussianProcessRegression(object):
         Parameters
         ----------
         x: (x_dim, ) numpy array
-        y: scalar
+        y: scalar or numpy array
         """
         x = np.reshape(x, (1, self.x_dim))
         y = np.reshape(y, (1, 1))
 
+        x = torch.tensor(x, requires_grad=False).type(torch.float32).to(self.device)
+        y = torch.tensor(y, requires_grad=False).type(torch.float32).to(self.device)
+
         if self.num_train == 0:
             self.X_train = x
             self.y_train = y
-            self.K = np.array([[self.se_kernel(x, x)]])
+            self.K = torch.tensor([[self.se_kernel(x, x)]], requires_grad=False).to(self.device)  # requires_grad?
             self.A_inv = 1/(self.K + self.sigma_e**2)
         else:
-            self.X_train = np.concatenate((self.X_train, x), axis=0)
-            self.y_train = np.concatenate((self.y_train, y), axis=0)
+            self.X_train = torch.cat((self.X_train, x), dim=0)
+            self.y_train = torch.cat((self.y_train, y), dim=0)
 
             # Update A inverse matrix
-            k_new = np.array([self.se_kernel(x, self.X_train[i, :]) for i in range(self.num_train)])
-            k_new = np.reshape(k_new, (k_new.shape[0], 1))
+            k_new = torch.tensor([self.se_kernel(x, self.X_train[i, :]) for i in range(self.num_train)],
+                                 requires_grad=False).to(self.device)
+            k_new = torch.reshape(k_new, (k_new.shape[0], 1))
             self.update_A_inv_mat(k_new)
 
             # Update covariance matrix K
-            self.K = np.concatenate((self.K, k_new.T), axis=0)
-            k_new_ext = np.concatenate((k_new, np.array([[self.se_kernel(x, x)]])), axis=0)
-            self.K = np.concatenate((self.K, k_new_ext), axis=1)
+            self.K = torch.cat((self.K, k_new.mT), dim=0)
+            k_new_ext = torch.cat((k_new, torch.tensor([[self.se_kernel(x, x)]]).to(self.device)), dim=0)
+            self.K = torch.cat((self.K, k_new_ext), dim=1)
 
         self.num_train += 1
 
@@ -62,14 +70,16 @@ class GaussianProcessRegression(object):
         """
         The squared exponential kernel function
         """
-        x1 = np.squeeze(x1)
-        x2 = np.squeeze(x2)
-        return (self.sigma_f**2) * np.exp(-1/2 * (x1 - x2).T @ np.linalg.inv(self.Lambda) @ (x1 - x2))
+        x1 = torch.squeeze(x1)
+        x2 = torch.squeeze(x2)
+        inv_lambda = torch.diag(1/self.Lambda)
+
+        return (self.sigma_f**2) * torch.exp(-1/2 * (x1 - x2) @ inv_lambda @ (x1 - x2))
 
     def update_A_inv_mat(self, k_new):
         B = k_new
-        C = k_new.T
-        D = np.array([[self.sigma_e**2 + self.sigma_f**2]])
+        C = k_new.mT
+        D = torch.reshape(self.sigma_e**2 + self.sigma_f**2, (1, 1))
         Q = 1./(D - C @ self.A_inv @ B)  # Just inverting a scalar
 
         new_A_inv_top_left = self.A_inv + self.A_inv @ B @ Q @ C @ self.A_inv
@@ -77,6 +87,6 @@ class GaussianProcessRegression(object):
         new_A_inv_bottom_left = -Q @ C @ self.A_inv
         new_A_inv_bottom_right = Q
 
-        new_A_inv_top = np.concatenate((new_A_inv_top_left, new_A_inv_top_right), axis=1)
-        new_A_inv_bottom = np.concatenate((new_A_inv_bottom_left, new_A_inv_bottom_right), axis=1)
-        self.A_inv = np.concatenate((new_A_inv_top, new_A_inv_bottom), axis=0)
+        new_A_inv_top = torch.cat((new_A_inv_top_left, new_A_inv_top_right), dim=1)
+        new_A_inv_bottom = torch.cat((new_A_inv_bottom_left, new_A_inv_bottom_right), dim=1)
+        self.A_inv = torch.cat((new_A_inv_top, new_A_inv_bottom), dim=0)

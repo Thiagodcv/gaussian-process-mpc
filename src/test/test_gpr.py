@@ -181,11 +181,12 @@ class TestGaussianProcessRegression(TestCase):
         new_K_inv_bottom = np.concatenate((new_K_inv_bottom_left, new_K_inv_bottom_right), axis=1)
         new_K_inv = np.concatenate((new_K_inv_top, new_K_inv_bottom), axis=0)
 
+        # Now test to see if GPR leads to same result
         gpr = GaussianProcessRegression(x_dim=2)
 
         for i in range(num_train):
             gpr.append_train_data(X_train[i, :], y_train[i])
         gpr.append_train_data(x, y)
-        gpr_A_inv = gpr.A_inv
+        gpr_A_inv = gpr.A_inv.cpu().detach().numpy()
 
-        self.assertTrue(np.linalg.norm(new_K_inv - gpr_A_inv) < 1e-5)
+        self.assertTrue(np.max(new_K_inv - gpr_A_inv) < 1e-5)
