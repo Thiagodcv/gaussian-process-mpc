@@ -29,6 +29,9 @@ class GaussianProcessRegression(object):
         self.sigma_e = torch.tensor(1., requires_grad=True).type(torch.float32).to(self.device)
         self.sigma_f = torch.tensor(1., requires_grad=True).type(torch.float32).to(self.device)
 
+        # Optimization
+        self.optimizer = torch.optim.Adam(params=[self.Lambda, self.sigma_e, self.sigma_f], lr=1e-3)
+
     def append_train_data(self, x, y):
         """
         Append (x, y) to preexisting training data.
@@ -90,3 +93,12 @@ class GaussianProcessRegression(object):
         new_A_inv_top = torch.cat((new_A_inv_top_left, new_A_inv_top_right), dim=1)
         new_A_inv_bottom = torch.cat((new_A_inv_bottom_left, new_A_inv_bottom_right), dim=1)
         self.A_inv = torch.cat((new_A_inv_top, new_A_inv_bottom), dim=0)
+
+    def update_ML_estimate(self):
+        """
+        Find ML estimate of GP hyperparameters (listed in the constructor).
+        """
+        # Constant removed from below
+        log_likelihood = 1/2 * self.y_train.mT @ self.A_inv @ self.y_train + 1/2 * torch.log(torch.det(self.A_inv))
+        log_likelihood.backward()
+        self.optimizer.step()
