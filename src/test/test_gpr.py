@@ -32,7 +32,8 @@ class TestGaussianProcessRegression(TestCase):
 
     def test_pytorch_mat_mult(self):
         # For multiplying two (10_000, 10_000) matrices, cuda+torch on average takes 0.8s (after first multiply)
-        # numpy on average takes 8.2s, and blas on average takes 6s.
+        # numpy on average takes 8.2s, and blas on average takes 6s. Tiny bit of numerical discrepancy between numpy
+        # and blas.
         A = torch.normal(mean=0, std=1, size=(10_000, 10_000), device='cuda')
         B = torch.normal(mean=0, std=1, size=(10_000, 10_000), device='cuda')
 
