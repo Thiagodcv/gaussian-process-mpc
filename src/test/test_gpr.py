@@ -1,7 +1,7 @@
 from unittest import TestCase
 import time
 import numpy as np
-from numba import njit
+from src.gpr import GaussianProcessRegression
 
 
 class TestGaussianProcessRegression(TestCase):
@@ -118,3 +118,48 @@ class TestGaussianProcessRegression(TestCase):
         print(new_A_inv)
 
         self.assertTrue(np.linalg.norm(new_A_inv_ineff - new_A_inv) < 1e-5)
+
+    def test_update_A_inv_mat(self):
+        num_train = 100
+        sigma_e = 1
+        sigma_f = 1
+        X_train = np.random.standard_normal(size=(num_train, 2))
+        y_train = np.random.standard_normal(size=(num_train,))
+        x = np.random.standard_normal(size=(2,))
+        y = np.random.standard_normal(size=(1,))
+
+        def gauss_kern(x1, x2):
+            return sigma_f ** 2 * np.exp(-1 / 2 * (x1 - x2).T @ (x1 - x2))
+
+        K = np.zeros((num_train, num_train))
+        for i in range(num_train):
+            for j in range(num_train):
+                K[i, j] = gauss_kern(X_train[i, :], X_train[j, :])
+
+        k_new = np.array([gauss_kern(x, X_train[i, :]) for i in range(X_train.shape[0])])
+        k_new = np.reshape(k_new, (num_train, 1))
+
+        A = K + (sigma_e ** 2) * np.identity(num_train)
+        A_inv = np.linalg.inv(A)
+        B = k_new
+        C = k_new.T
+        D = np.array([[sigma_e ** 2 + sigma_f ** 2]])
+        Q = np.linalg.inv(D - C @ A_inv @ B)
+
+        new_K_inv_top_left = A_inv + A_inv @ B @ Q @ C @ A_inv
+        new_K_inv_top_right = -A_inv @ B @ Q
+        new_K_inv_bottom_left = -Q @ C @ A_inv
+        new_K_inv_bottom_right = Q
+
+        new_K_inv_top = np.concatenate((new_K_inv_top_left, new_K_inv_top_right), axis=1)
+        new_K_inv_bottom = np.concatenate((new_K_inv_bottom_left, new_K_inv_bottom_right), axis=1)
+        new_K_inv = np.concatenate((new_K_inv_top, new_K_inv_bottom), axis=0)
+
+        gpr = GaussianProcessRegression(x_dim=2)
+
+        for i in range(num_train):
+            gpr.append_train_data(X_train[i, :], y_train[i])
+        gpr.append_train_data(x, y)
+        gpr_A_inv = gpr.A_inv
+
+        self.assertTrue(np.linalg.norm(new_K_inv - gpr_A_inv) < 1e-5)

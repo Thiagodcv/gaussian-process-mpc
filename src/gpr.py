@@ -32,16 +32,19 @@ class GaussianProcessRegression(object):
         Parameters
         ----------
         x: (x_dim) numpy array
-        y: scalar
+        y: (1, 1) numpy array
         """
+        x = np.reshape(x, (1, self.x_dim))
+        y = np.reshape(y, (1, 1))
+
         if self.num_train == 0:
             self.X_train = x
             self.y_train = y
             self.K = np.array([[self.se_kernel(x, x)]])
-            self.A_inv = 1/(self.K[0][0] + self.sigma_e**2)
+            self.A_inv = 1/(self.K + self.sigma_e**2)
         else:
             self.X_train = np.concatenate((self.X_train, x), axis=0)
-            self.y_train = np.concatenate((self.y_train, y))
+            self.y_train = np.concatenate((self.y_train, y), axis=0)
 
             # Update A inverse matrix
             k_new = np.array([self.se_kernel(x, self.X_train[i, :]) for i in range(self.num_train)])
@@ -59,13 +62,15 @@ class GaussianProcessRegression(object):
         """
         The squared exponential kernel function
         """
+        x1 = np.squeeze(x1)
+        x2 = np.squeeze(x2)
         return (self.sigma_f**2) * np.exp(-1/2 * (x1 - x2).T @ np.linalg.inv(self.Lambda) @ (x1 - x2))
 
     def update_A_inv_mat(self, k_new):
         B = k_new
         C = k_new.T
         D = np.array([[self.sigma_e**2 + self.sigma_f**2]])
-        Q = np.linalg.inv(D - C @ self.A_inv @ B)
+        Q = 1./(D - C @ self.A_inv @ B)  # Just inverting a scalar
 
         new_A_inv_top_left = self.A_inv + self.A_inv @ B @ Q @ C @ self.A_inv
         new_A_inv_top_right = -self.A_inv @ B @ Q
