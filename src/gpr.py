@@ -25,12 +25,14 @@ class GaussianProcessRegression(object):
         self.A_inv = None
 
         # Hyperparameters to update via backprop
-        self.Lambda = torch.ones(x_dim, requires_grad=True).type(torch.float32).to(self.device)
-        self.sigma_e = torch.tensor(1., requires_grad=True).type(torch.float32).to(self.device)
-        self.sigma_f = torch.tensor(1., requires_grad=True).type(torch.float32).to(self.device)
+        self.Lambda = torch.ones(x_dim, device=self.device).type(torch.float32).requires_grad_()
+        self.sigma_e = torch.tensor(1., device=self.device).type(torch.float32).requires_grad_()
+        self.sigma_f = torch.tensor(1., device=self.device).type(torch.float32).requires_grad_()
 
         # Optimization
-        self.optimizer = torch.optim.Adam(params=[self.Lambda, self.sigma_e, self.sigma_f], lr=1e-3)
+        self.optimizer = torch.optim.LBFGS(params=[self.Lambda, self.sigma_e, self.sigma_f],
+                                           lr=1e-1,
+                                           max_iter=5)
 
     def append_train_data(self, x, y):
         """
@@ -106,22 +108,19 @@ class GaussianProcessRegression(object):
             for j in range(self.num_train):
                 self.K[i, j] = self.se_kernel(self.X_train[i, :], self.X_train[j, :])
 
-        self.A_inv = torch.linalg.inv(self.K + self.sigma_e**2 * torch.identity(self.num_train))
+        self.A_inv = torch.linalg.inv(self.K + self.sigma_e**2 * torch.eye(self.num_train, device=self.device))
 
     def update_ML_estimate(self):
         """
         Find ML estimate of GP hyperparameters (listed in the constructor).
         """
-        iter = 0
-
-        while ((torch.max(self.sigma_e.grad) >= 1e-5 or
-                torch.max(self.sigma_f.grad) >= 1e-5 or
-                torch.max(self.Lambda.grad) >= 1e-5) and
-                iter < 10):
-            # Constant removed from below
+        def closure():
+            print("called")
+            self.build_A_inv_mat()  # Compute A_inv again but under new hyperparameters
+            log_likelihood = (1 / 2 * self.y_train.mT @ self.A_inv @ self.y_train +
+                              1 / 2 * torch.log(torch.det(self.A_inv)))  # Constant removed
             self.optimizer.zero_grad()
-            self.build_A_inv_mat()
-            log_likelihood = 1/2 * self.y_train.mT @ self.A_inv @ self.y_train + 1/2 * torch.log(torch.det(self.A_inv))
             log_likelihood.backward()
-            self.optimizer.step()
-            iter += 1
+            return log_likelihood
+
+        self.optimizer.step(closure)

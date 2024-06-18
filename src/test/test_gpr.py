@@ -190,3 +190,29 @@ class TestGaussianProcessRegression(TestCase):
         gpr_A_inv = gpr.A_inv.cpu().detach().numpy()
 
         self.assertTrue(np.max(new_K_inv - gpr_A_inv) < 1e-5)
+
+    def test_update_ML_estimate(self):
+        """
+        Ensure program runs without crashing
+        """
+        num_train = 100
+        X_train = np.random.standard_normal(size=(num_train, 2))
+        y_train = np.random.standard_normal(size=(num_train,))
+
+        gpr = GaussianProcessRegression(x_dim=2)
+        for i in range(num_train):
+            gpr.append_train_data(X_train[i, :], y_train[i])
+
+        gpr.update_ML_estimate()
+
+        print("sigma_e: ", gpr.sigma_e)
+        print("sigma_f: ", gpr.sigma_f)
+        print("Lambda: ", gpr.Lambda)
+
+    def test_ML_estimate_converges(self):
+        """
+        TODO
+        Ensure maximum likelihood estimation appears to be doing the right thing.
+        """
+        pass
+    
