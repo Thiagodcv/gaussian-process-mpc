@@ -71,7 +71,7 @@ class GaussianProcessRegression(object):
 
     def se_kernel(self, x1, x2):
         """
-        The squared exponential kernel function
+        The squared exponential kernel function.
         """
         x1 = torch.squeeze(x1)
         x2 = torch.squeeze(x2)
@@ -80,6 +80,9 @@ class GaussianProcessRegression(object):
         return (self.sigma_f**2) * torch.exp(-1/2 * (x1 - x2) @ inv_lambda @ (x1 - x2))
 
     def update_A_inv_mat(self, k_new):
+        """
+        Update A_inv_mat to include a new datapoint in X_train.
+        """
         B = k_new
         C = k_new.mT
         D = torch.reshape(self.sigma_e**2 + self.sigma_f**2, (1, 1))
@@ -94,11 +97,31 @@ class GaussianProcessRegression(object):
         new_A_inv_bottom = torch.cat((new_A_inv_bottom_left, new_A_inv_bottom_right), dim=1)
         self.A_inv = torch.cat((new_A_inv_top, new_A_inv_bottom), dim=0)
 
+    def build_A_inv_mat(self):
+        """
+        Builds A_inv from scratch using training data.
+        """
+        self.K = torch.zeros(size=self.K.shape, device=self.device, requires_grad=False).type(torch.float32)
+        for i in range(self.num_train):
+            for j in range(self.num_train):
+                self.K[i, j] = self.se_kernel(self.X_train[i, :], self.X_train[j, :])
+
+        self.A_inv = torch.linalg.inv(self.K + self.sigma_e**2 * torch.identity(self.num_train))
+
     def update_ML_estimate(self):
         """
         Find ML estimate of GP hyperparameters (listed in the constructor).
         """
-        # Constant removed from below
-        log_likelihood = 1/2 * self.y_train.mT @ self.A_inv @ self.y_train + 1/2 * torch.log(torch.det(self.A_inv))
-        log_likelihood.backward()
-        self.optimizer.step()
+        iter = 0
+
+        while ((torch.max(self.sigma_e.grad) >= 1e-5 or
+                torch.max(self.sigma_f.grad) >= 1e-5 or
+                torch.max(self.Lambda.grad) >= 1e-5) and
+                iter < 10):
+            # Constant removed from below
+            self.optimizer.zero_grad()
+            self.build_A_inv_mat()
+            log_likelihood = 1/2 * self.y_train.mT @ self.A_inv @ self.y_train + 1/2 * torch.log(torch.det(self.A_inv))
+            log_likelihood.backward()
+            self.optimizer.step()
+            iter += 1
