@@ -209,10 +209,73 @@ class TestGaussianProcessRegression(TestCase):
         print("sigma_f: ", gpr.sigma_f)
         print("Lambda: ", gpr.Lambda)
 
-    def test_ML_estimate_converges(self):
+    def test_gradient_calculation(self):
         """
-        TODO
-        Ensure maximum likelihood estimation appears to be doing the right thing.
+        Test to see if the gradient calculation I derived is correct.
         """
-        pass
-    
+        num_train = 3
+        sigma_f = 1.
+        X_train = np.random.standard_normal(size=(num_train, 2))
+        lambdas = np.array([1., 2.])
+        epsilon = 1e-7
+
+        def gauss_kern(x1, x2, e1, e2):
+            ers = np.array([e1, e2])
+            Lambda_inv = np.diag(1 / (lambdas + ers))
+            return sigma_f ** 2 * np.exp(-1 / 2 * (x1 - x2).T @ Lambda_inv @ (x1 - x2))
+
+        K = np.zeros((num_train, num_train))
+        for i in range(num_train):
+            for j in range(num_train):
+                K[i, j] = gauss_kern(X_train[i, :], X_train[j, :], 0, 0)
+
+        A = np.zeros((num_train, num_train, 2))
+        for i in range(num_train):
+            for j in range(num_train):
+                for k in range(2):
+                    A[i, j, k] = (1/(2*lambdas[k]**2)) * (X_train[i, k] - X_train[j, k])**2
+
+        dKdL1 = np.multiply(K, A[:, :, 0])
+        dKdL2 = np.multiply(K, A[:, :, 1])
+
+        # Estimate matrix derivatives using finite difference
+        K_L1_step = np.zeros((num_train, num_train))
+        for i in range(num_train):
+            for j in range(num_train):
+                K_L1_step[i, j] = gauss_kern(X_train[i, :], X_train[j, :], epsilon, 0)
+
+        K_L2_step = np.zeros((num_train, num_train))
+        for i in range(num_train):
+            for j in range(num_train):
+                K_L2_step[i, j] = gauss_kern(X_train[i, :], X_train[j, :], 0, epsilon)
+
+        dKdL1_finite_diff = (K_L1_step - K) / epsilon
+        dKdL2_finite_diff = (K_L2_step - K) / epsilon
+
+        print(np.linalg.norm(dKdL1 - dKdL1_finite_diff))
+        print(np.linalg.norm(dKdL2 - dKdL2_finite_diff))
+
+    def test_gradient_calculation_scalar(self):
+        sigma_f = 1.
+        x1 = np.array([5., 6.])
+        x2 = np.array([3., 4.])
+        lambdas = np.array([1., 2.])
+        epsilon = 1e-7
+
+        def gauss_kern(x1, x2, e1, e2):
+            eps = np.array([e1, e2])
+            Lambda_inv = np.diag(1 / (lambdas + eps))
+            return (sigma_f ** 2) * np.exp(-1 / 2 * (x1 - x2).T @ Lambda_inv @ (x1 - x2))
+
+        k = gauss_kern(x1, x2, 0, 0)
+        k_l1_step = gauss_kern(x1, x2, epsilon, 0)
+        k_l2_step = gauss_kern(x1, x2, 0, epsilon)
+        dkdl1_fin_diff = (k_l1_step - k)/epsilon
+        dkdl2_fin_diff = (k_l2_step - k)/epsilon
+
+        # Derivative is clearly wrong.
+        dkdl1 = k * (1/(2 * lambdas[0]**2)) * (x1[0] - x2[0])**2
+        dkdl2 = k * (1/(2 * lambdas[1]**2)) * (x1[1] - x2[1])**2
+
+        print(dkdl1 - dkdl1_fin_diff)
+        print(dkdl2 - dkdl2_fin_diff)
