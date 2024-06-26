@@ -237,9 +237,10 @@ class TestGaussianProcessRegression(TestCase):
         print("sigma_f: ", gpr.sigma_f)
         print("Lambda: ", gpr.Lambda)
 
-    def test_gradient_calculation(self):
+    def test_lambda_gradient_calculation(self):
         """
-        Test to see if the gradient calculation I derived is correct.
+        Test to see if the gradient calculation of lambda parameters I derived is correct.
+        NOTE: The K kernel matrix is K_f, not K_y in the following tests.
         """
         num_train = 3
         sigma_f = 1.
@@ -282,6 +283,47 @@ class TestGaussianProcessRegression(TestCase):
 
         print(np.linalg.norm(dKdL1 - dKdL1_finite_diff))
         print(np.linalg.norm(dKdL2 - dKdL2_finite_diff))
+
+    def test_sigma_gradient_calculation(self):
+        """
+        Test to see if the gradient calculation of sigma parameters I derived is correct.
+        NOTE: The K kernel matrix is K_y in the following tests.
+        """
+        num_train = 3
+        sigma_f = 1.
+        sigma_e = 0.5
+        X_train = np.random.standard_normal(size=(num_train, 2))
+        lambdas = np.array([1., 2.])
+        epsilon = 1e-7
+
+        def gauss_kern(x1, x2, e_f):
+            Lambda_inv = np.diag(1 / lambdas)
+            return (sigma_f + e_f) ** 2 * np.exp(-1 / 2 * (x1 - x2).T @ Lambda_inv @ (x1 - x2))
+
+        K = np.zeros((num_train, num_train))
+        for i in range(num_train):
+            for j in range(num_train):
+                K[i, j] = gauss_kern(X_train[i, :], X_train[j, :], 0)
+
+        K_y = K + sigma_e * np.identity(num_train)
+
+        K_y_noise_step = K + (sigma_e + epsilon) * np.identity(num_train)
+
+        # Estimate matrix derivatives using finite difference
+        K_y_function_step = np.zeros((num_train, num_train))
+        for i in range(num_train):
+            for j in range(num_train):
+                K_y_function_step[i, j] = gauss_kern(X_train[i, :], X_train[j, :], epsilon)
+        K_y_function_step += sigma_e * np.identity(num_train)
+
+        dKdsigma_e_finite_diff = (K_y_noise_step - K_y) / epsilon
+        dKdsigma_f_finite_diff = (K_y_function_step - K_y) / epsilon
+
+        dKdsigma_e = 2 * sigma_e * np.identity(num_train)
+        dKdsigma_f = 2/sigma_f * K
+
+        print(np.linalg.norm(dKdsigma_e_finite_diff - dKdsigma_e))
+        print(np.linalg.norm(dKdsigma_f_finite_diff - dKdsigma_f))
 
     def test_gradient_calculation_scalar(self):
         sigma_f = 1.
