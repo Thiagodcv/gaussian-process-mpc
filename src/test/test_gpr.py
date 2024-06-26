@@ -15,7 +15,7 @@ class TestGaussianProcessRegression(TestCase):
         pass
 
     def test_matrix_inverse(self):
-        # Results: 1000: 0.077s, 2000: 0.34s, 3000: 0.88s
+        # Results: 1000: 0.11s, 2000: 0.53s, 3000: 1.45s
         avg_time = []
         n_trials = 20
         for i in range(1, 3 + 1):
@@ -25,6 +25,34 @@ class TestGaussianProcessRegression(TestCase):
             for j in range(n_trials):
                 start = time.time()
                 np.linalg.inv(np.random.normal(size=size))
+                end = time.time()
+                avg_time[i - 1] += end - start
+            avg_time[i - 1] = avg_time[i - 1] / n_trials
+        print(avg_time)
+
+    def test_torch_matrix_inverse(self):
+        # Results:
+        # 1000: 0.39s
+        # 2000: 0.087s
+        # 3000: 0.17s
+        # 4000: 0.31s
+        # 5000: 0.47s
+        # 6000: 0.66s
+        # 7000: 0.89s
+        # 8000: 1.12s
+        # 9000: 1.55s
+        # 10_000: 2.01s
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        avg_time = []
+        n_trials = 20
+        for i in range(1, 10 + 1):
+            print(i)
+            size = (i * 1000, i * 1000)
+            avg_time.append(0)
+            for j in range(n_trials):
+                start = time.time()
+                A = torch.linalg.inv(torch.normal(mean=0., std=1., size=size, device=device))
+                A_np = A.cpu().detach().numpy()
                 end = time.time()
                 avg_time[i - 1] += end - start
             avg_time[i - 1] = avg_time[i - 1] / n_trials
