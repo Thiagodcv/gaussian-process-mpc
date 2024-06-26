@@ -32,7 +32,7 @@ class GaussianProcessRegression(object):
         # Optimization
         self.optimizer = torch.optim.LBFGS(params=[self.Lambda, self.sigma_e, self.sigma_f],
                                            lr=1e-1,
-                                           max_iter=5)
+                                           max_iter=20)
 
     def append_train_data(self, x, y):
         """
@@ -110,17 +110,40 @@ class GaussianProcessRegression(object):
 
         self.A_inv = torch.linalg.inv(self.K + self.sigma_e**2 * torch.eye(self.num_train, device=self.device))
 
-    def update_ML_estimate(self):
+    def update_hyperparams(self):
         """
-        Find ML estimate of GP hyperparameters (listed in the constructor).
+        Find estimate of GP hyperparameters (listed in the constructor) by maximizing
+        the marginal likelihood.
         """
-        def closure():
-            print("called")
-            self.build_A_inv_mat()  # Compute A_inv again but under new hyperparameters
-            log_likelihood = (1 / 2 * self.y_train.mT @ self.A_inv @ self.y_train +
-                              1 / 2 * torch.log(torch.det(self.A_inv)))  # Constant removed
-            self.optimizer.zero_grad()
-            log_likelihood.backward()
-            return log_likelihood
+        pass
 
-        self.optimizer.step(closure)
+    def kernel_matrix_gradient(self):
+        """
+        Computes the gradients of K_y with respect to lambda_j, sigma_n, and sigma_f.
+        Assumes a fully updated K_f matrix has been computed.
+
+        Returns:
+        -------
+        dict containing gradients in torch.tensor format
+        """
+        A = torch.zeros((self.num_train, self.num_train, self.x_dim))
+        for i in range(self.num_train):
+            for j in range(self.num_train):
+                for k in range(self.x_dim):
+                    A[i, j, k] = (1 / (2 * self.Lambda[k] ** 2)) * (self.X_train[i, k] - self.X_train[j, k]) ** 2
+
+        dK_dlambda = torch.zeros((self.num_train, self.num_train, self.x_dim))
+        for k in range(self.x_dim):
+            dK_dlambda[:, :, k] = self.K @ A[:, :, k]
+
+        dK_dsigma_f = 2 / self.sigma_f * self.K
+        dK_dsigma_n = 2 * self.sigma_e * torch.eye(self.num_train, device=self.device)
+
+        return {'lambda': dK_dlambda, 'sigma_f': dK_dsigma_f, 'sigma_n': dK_dsigma_n}
+
+    def marginal_likelihood_grad(self):
+        """
+        Computes the gradients of the marginal likelihood with respect to lambda_j, sigma_n, and sigma_f.
+        Assumes a fully updated K_f matrix has been computed.
+        """
+        pass
