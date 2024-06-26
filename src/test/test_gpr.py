@@ -349,3 +349,54 @@ class TestGaussianProcessRegression(TestCase):
 
         print(dkdl1 - dkdl1_fin_diff)
         print(dkdl2 - dkdl2_fin_diff)
+
+    def test_kernel_matrix_gradient(self):
+        x_dim = 2
+        num_train = 3
+        gpr = GaussianProcessRegression(x_dim=x_dim)
+        X_train = np.random.standard_normal(size=(num_train, x_dim))
+        y_train = np.random.standard_normal(size=(num_train,))
+
+        for i in range(num_train):
+            gpr.append_train_data(X_train[i, :], y_train[i])
+
+        grad_dict = gpr.kernel_matrix_gradient()
+
+        # Now compute all gradients using finite difference and compare
+        lambdas = gpr.Lambda.cpu().detach().numpy()
+        sigma_f = gpr.sigma_f.cpu().detach().numpy()
+        sigma_e = gpr.sigma_e.cpu().detach().numpy()
+        epsilon = 1e-7
+
+        def gauss_kern(x1, x2, e1, e2):
+            ers = np.array([e1, e2])
+            Lambda_inv = np.diag(1 / (lambdas + ers))
+            return sigma_f ** 2 * np.exp(-1 / 2 * (x1 - x2).T @ Lambda_inv @ (x1 - x2))
+
+        K_y = np.zeros((num_train, num_train))
+        for i in range(num_train):
+            for j in range(num_train):
+                K_y[i, j] = gauss_kern(X_train[i, :], X_train[j, :], 0, 0)
+        K_y += sigma_e * np.identity(num_train)
+
+        # LAMBDA PARAMETERS
+        K_y_L1_step = np.zeros((num_train, num_train))
+        for i in range(num_train):
+            for j in range(num_train):
+                K_y_L1_step[i, j] = gauss_kern(X_train[i, :], X_train[j, :], epsilon, 0)
+        K_y_L1_step += sigma_e * np.identity(num_train)
+
+        K_y_L2_step = np.zeros((num_train, num_train))
+        for i in range(num_train):
+            for j in range(num_train):
+                K_y_L2_step[i, j] = gauss_kern(X_train[i, :], X_train[j, :], 0, epsilon)
+        K_y_L2_step += sigma_e * np.identity(num_train)
+
+        dKdL1_finite_diff = (K_y_L1_step - K_y) / epsilon
+        dKdL2_finite_diff = (K_y_L2_step - K_y) / epsilon
+
+        self.assertTrue(np.linalg.norm(grad_dict['lambda'][:, :, 0].cpu().detach().numpy() - dKdL1_finite_diff) < 1e-5)
+        self.assertTrue(np.linalg.norm(grad_dict['lambda'][:, :, 1].cpu().detach().numpy() - dKdL2_finite_diff) < 1e-5)
+
+        # SIGMA_E PARAMETER
+        
