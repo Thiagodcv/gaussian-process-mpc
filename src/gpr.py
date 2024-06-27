@@ -119,8 +119,6 @@ class GaussianProcessRegression(object):
 
     def kernel_matrix_gradient(self):
         """
-        TODO: Write a test for this function
-
         Computes the gradients of K_y with respect to lambda_j, sigma_n, and sigma_f.
         Assumes a fully updated K_f matrix has been computed.
 
@@ -143,9 +141,33 @@ class GaussianProcessRegression(object):
 
         return {'lambda': dK_dlambda, 'sigma_f': dK_dsigma_f, 'sigma_n': dK_dsigma_n}
 
-    def marginal_likelihood_grad(self):
+    def marginal_likelihood_grad(self, gradient_dict):
         """
+        TODO: Write a test for this method
         Computes the gradients of the marginal likelihood with respect to lambda_j, sigma_n, and sigma_f.
-        Assumes a fully updated K_f matrix has been computed.
+        Assumes K_f and inverse(K_y) have already been fully updated.
+
+        Parameters:
+        ----------
+        gradient_dict: dict
+            A dictionary containing the gradients of K_y w.r.t. hyperparameters
+
+        Returns:
+        -------
+        (d+2,) tensor
+            The gradient of the marginal likelihood w.r.t hyperparameters. The first d elements are the
+            lambda gradients, then the sigma_f and sigma_n gradients respectively.
         """
-        pass
+        dml_dtheta = torch.zeros(size=(self.x_dim,), device=self.device)
+        dK_dlambda = gradient_dict['lambda']
+        dK_dsigma_f = gradient_dict['sigma_f']
+        dK_dsigma_n = gradient_dict['sigma_n']
+
+        alpha = self.A_inv @ self.y_train
+        B = torch.outer(alpha, alpha) - self.A_inv
+        for i in range(self.x_dim):
+            dml_dtheta[i] = 1/2*torch.trace(B @ dK_dlambda[:, :, i])
+
+        dml_dtheta[self.x_dim] = 1/2*torch.trace(B @ dK_dsigma_f)
+        dml_dtheta[self.x_dim+1] = 1/2*torch.trace(B @ dK_dsigma_n)
+        return dml_dtheta
