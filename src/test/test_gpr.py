@@ -412,3 +412,84 @@ class TestGaussianProcessRegression(TestCase):
         K_y_sigma_e_step = K + (sigma_e + epsilon)**2 * np.identity(num_train)
         dKdsigma_e_finite_diff = (K_y_sigma_e_step - K_y) / epsilon
         self.assertTrue(np.linalg.norm(grad_dict['sigma_n'].cpu().detach().numpy() - dKdsigma_e_finite_diff) < 1e-5)
+
+    def test_marginal_likelihood_grad(self):
+        x_dim = 2
+        num_train = 3
+        gpr = GaussianProcessRegression(x_dim=x_dim)
+        X_train = np.random.standard_normal(size=(num_train, x_dim))
+        y_train = np.random.standard_normal(size=(num_train,))
+
+        for i in range(num_train):
+            gpr.append_train_data(X_train[i, :], y_train[i])
+
+        grad_dict = gpr.kernel_matrix_gradient()
+        dml_dtheta = gpr.marginal_likelihood_grad(grad_dict)
+        print(dml_dtheta)
+
+        # Now compute all gradients using finite difference and compare
+        lambdas = gpr.Lambda.cpu().detach().numpy()
+        sigma_f = gpr.sigma_f.cpu().detach().numpy()
+        sigma_e = gpr.sigma_e.cpu().detach().numpy()
+        epsilon = 1e-9
+
+        def gauss_kern(x1, x2, e1, e2, e3):
+            ers = np.array([e1, e2])
+            Lambda_inv = np.diag(1 / (lambdas + ers))
+            return (sigma_f + e3) ** 2 * np.exp(-1 / 2 * (x1 - x2).T @ Lambda_inv @ (x1 - x2))
+
+        K = np.zeros((num_train, num_train))
+        for i in range(num_train):
+            for j in range(num_train):
+                K[i, j] = gauss_kern(X_train[i, :], X_train[j, :], 0, 0, 0)
+        K_y = K + sigma_e ** 2 * np.identity(num_train)
+
+        # LAMBDA PARAMETERS
+        K_y_L1_step = np.zeros((num_train, num_train))
+        for i in range(num_train):
+            for j in range(num_train):
+                K_y_L1_step[i, j] = gauss_kern(X_train[i, :], X_train[j, :], epsilon, 0, 0)
+        K_y_L1_step += sigma_e ** 2 * np.identity(num_train)
+
+        K_y_L2_step = np.zeros((num_train, num_train))
+        for i in range(num_train):
+            for j in range(num_train):
+                K_y_L2_step[i, j] = gauss_kern(X_train[i, :], X_train[j, :], 0, epsilon, 0)
+        K_y_L2_step += sigma_e ** 2 * np.identity(num_train)
+
+        # SIGMA_F PARAMETER
+        K_y_sigma_f_step = np.zeros((num_train, num_train))
+        for i in range(num_train):
+            for j in range(num_train):
+                K_y_sigma_f_step[i, j] = gauss_kern(X_train[i, :], X_train[j, :], 0, 0, epsilon)
+        K_y_sigma_f_step += sigma_e ** 2 * np.identity(num_train)
+
+        # SIGMA_E PARAMETER
+        K_y_sigma_e_step = K + (sigma_e + epsilon) ** 2 * np.identity(num_train)
+
+        ml_K_y = (-1/2 * y_train.T @ np.linalg.inv(K_y) @ y_train -
+                  1/2 * np.log(np.linalg.det(K_y)) - num_train/2 * np.log(2*np.pi))
+        ml_L1_step = (-1/2 * y_train.T @ np.linalg.inv(K_y_L1_step) @ y_train -
+                      1/2 * np.log(np.linalg.det(K_y_L1_step)) - num_train/2 * np.log(2*np.pi))
+        ml_L2_step = (-1/2 * y_train.T @ np.linalg.inv(K_y_L2_step) @ y_train -
+                      1/2 * np.log(np.linalg.det(K_y_L2_step)) - num_train/2 * np.log(2*np.pi))
+        ml_sigma_f_step = (-1/2 * y_train.T @ np.linalg.inv(K_y_sigma_f_step) @ y_train -
+                           1/2 * np.log(np.linalg.det(K_y_sigma_f_step)) - num_train/2 * np.log(2*np.pi))
+        ml_sigma_e_step = (-1/2 * y_train.T @ np.linalg.inv(K_y_sigma_e_step) @ y_train -
+                           1/2 * np.log(np.linalg.det(K_y_sigma_e_step)) - num_train/2 * np.log(2*np.pi))
+
+        L1_finite_diff = (ml_L1_step - ml_K_y)/epsilon
+        L2_finite_diff = (ml_L2_step - ml_K_y)/epsilon
+        sigma_f_finite_diff = (ml_sigma_f_step - ml_K_y)/epsilon
+        sigma_e_finite_diff = (ml_sigma_e_step - ml_K_y) / epsilon
+
+        print(L1_finite_diff)
+        print(L2_finite_diff)
+        print(sigma_f_finite_diff)
+        print(sigma_e_finite_diff)
+
+        dml_dtheta = dml_dtheta.cpu().detach().numpy()
+        self.assertTrue(np.linalg.norm(dml_dtheta[0] - L1_finite_diff) < 1e-3)
+        self.assertTrue(np.linalg.norm(dml_dtheta[1] - L2_finite_diff) < 1e-3)
+        self.assertTrue(np.linalg.norm(dml_dtheta[2] - sigma_f_finite_diff) < 1e-3)
+        self.assertTrue(np.linalg.norm(dml_dtheta[3] - sigma_e_finite_diff) < 1e-3)
