@@ -132,7 +132,7 @@ class GaussianProcessRegression(object):
                 for k in range(self.x_dim):
                     A[i, j, k] = (1 / (2 * self.Lambda[k] ** 2)) * (self.X_train[i, k] - self.X_train[j, k]) ** 2
 
-        dK_dlambda = torch.zeros((self.num_train, self.num_train, self.x_dim))
+        dK_dlambda = torch.zeros((self.num_train, self.num_train, self.x_dim), device=self.device)
         for k in range(self.x_dim):
             dK_dlambda[:, :, k] = torch.multiply(self.K, A[:, :, k])
 
@@ -158,13 +158,13 @@ class GaussianProcessRegression(object):
             The gradient of the marginal likelihood w.r.t hyperparameters. The first d elements are the
             lambda gradients, then the sigma_f and sigma_n gradients respectively.
         """
-        dml_dtheta = torch.zeros(size=(self.x_dim,), device=self.device)
+        dml_dtheta = torch.zeros(size=(self.x_dim+2,), device=self.device)
         dK_dlambda = gradient_dict['lambda']
         dK_dsigma_f = gradient_dict['sigma_f']
         dK_dsigma_n = gradient_dict['sigma_n']
 
         alpha = self.A_inv @ self.y_train
-        B = torch.outer(alpha, alpha) - self.A_inv
+        B = alpha @ alpha.mT - self.A_inv
         for i in range(self.x_dim):
             dml_dtheta[i] = 1/2*torch.trace(B @ dK_dlambda[:, :, i])
 
