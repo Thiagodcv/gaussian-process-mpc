@@ -119,6 +119,8 @@ class GaussianProcessRegression(object):
 
     def kernel_matrix_gradient(self):
         """
+        TODO: Write a test for this function
+
         Computes the gradients of K_y with respect to lambda_j, sigma_n, and sigma_f.
         Assumes a fully updated K_f matrix has been computed.
 
@@ -126,7 +128,7 @@ class GaussianProcessRegression(object):
         -------
         dict containing gradients in torch.tensor format
         """
-        A = torch.zeros((self.num_train, self.num_train, self.x_dim))
+        A = torch.zeros((self.num_train, self.num_train, self.x_dim), device=self.device)
         for i in range(self.num_train):
             for j in range(self.num_train):
                 for k in range(self.x_dim):
@@ -134,7 +136,7 @@ class GaussianProcessRegression(object):
 
         dK_dlambda = torch.zeros((self.num_train, self.num_train, self.x_dim))
         for k in range(self.x_dim):
-            dK_dlambda[:, :, k] = self.K @ A[:, :, k]
+            dK_dlambda[:, :, k] = torch.multiply(self.K, A[:, :, k])
 
         dK_dsigma_f = 2 / self.sigma_f * self.K
         dK_dsigma_n = 2 * self.sigma_e * torch.eye(self.num_train, device=self.device)

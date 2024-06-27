@@ -305,16 +305,16 @@ class TestGaussianProcessRegression(TestCase):
             for j in range(num_train):
                 K[i, j] = gauss_kern(X_train[i, :], X_train[j, :], 0)
 
-        K_y = K + sigma_e * np.identity(num_train)
+        K_y = K + sigma_e**2 * np.identity(num_train)
 
-        K_y_noise_step = K + (sigma_e + epsilon) * np.identity(num_train)
+        K_y_noise_step = K + (sigma_e + epsilon)**2 * np.identity(num_train)
 
         # Estimate matrix derivatives using finite difference
         K_y_function_step = np.zeros((num_train, num_train))
         for i in range(num_train):
             for j in range(num_train):
                 K_y_function_step[i, j] = gauss_kern(X_train[i, :], X_train[j, :], epsilon)
-        K_y_function_step += sigma_e * np.identity(num_train)
+        K_y_function_step += sigma_e**2 * np.identity(num_train)
 
         dKdsigma_e_finite_diff = (K_y_noise_step - K_y) / epsilon
         dKdsigma_f_finite_diff = (K_y_function_step - K_y) / epsilon
@@ -368,29 +368,29 @@ class TestGaussianProcessRegression(TestCase):
         sigma_e = gpr.sigma_e.cpu().detach().numpy()
         epsilon = 1e-7
 
-        def gauss_kern(x1, x2, e1, e2):
+        def gauss_kern(x1, x2, e1, e2, e3):
             ers = np.array([e1, e2])
             Lambda_inv = np.diag(1 / (lambdas + ers))
-            return sigma_f ** 2 * np.exp(-1 / 2 * (x1 - x2).T @ Lambda_inv @ (x1 - x2))
+            return (sigma_f + e3) ** 2 * np.exp(-1 / 2 * (x1 - x2).T @ Lambda_inv @ (x1 - x2))
 
-        K_y = np.zeros((num_train, num_train))
+        K = np.zeros((num_train, num_train))
         for i in range(num_train):
             for j in range(num_train):
-                K_y[i, j] = gauss_kern(X_train[i, :], X_train[j, :], 0, 0)
-        K_y += sigma_e * np.identity(num_train)
+                K[i, j] = gauss_kern(X_train[i, :], X_train[j, :], 0, 0, 0)
+        K_y = K + sigma_e**2 * np.identity(num_train)
 
         # LAMBDA PARAMETERS
         K_y_L1_step = np.zeros((num_train, num_train))
         for i in range(num_train):
             for j in range(num_train):
-                K_y_L1_step[i, j] = gauss_kern(X_train[i, :], X_train[j, :], epsilon, 0)
-        K_y_L1_step += sigma_e * np.identity(num_train)
+                K_y_L1_step[i, j] = gauss_kern(X_train[i, :], X_train[j, :], epsilon, 0, 0)
+        K_y_L1_step += sigma_e**2 * np.identity(num_train)
 
         K_y_L2_step = np.zeros((num_train, num_train))
         for i in range(num_train):
             for j in range(num_train):
-                K_y_L2_step[i, j] = gauss_kern(X_train[i, :], X_train[j, :], 0, epsilon)
-        K_y_L2_step += sigma_e * np.identity(num_train)
+                K_y_L2_step[i, j] = gauss_kern(X_train[i, :], X_train[j, :], 0, epsilon, 0)
+        K_y_L2_step += sigma_e**2 * np.identity(num_train)
 
         dKdL1_finite_diff = (K_y_L1_step - K_y) / epsilon
         dKdL2_finite_diff = (K_y_L2_step - K_y) / epsilon
@@ -398,5 +398,17 @@ class TestGaussianProcessRegression(TestCase):
         self.assertTrue(np.linalg.norm(grad_dict['lambda'][:, :, 0].cpu().detach().numpy() - dKdL1_finite_diff) < 1e-5)
         self.assertTrue(np.linalg.norm(grad_dict['lambda'][:, :, 1].cpu().detach().numpy() - dKdL2_finite_diff) < 1e-5)
 
+        # SIGMA_F PARAMETER
+        K_y_sigma_f_step = np.zeros((num_train, num_train))
+        for i in range(num_train):
+            for j in range(num_train):
+                K_y_sigma_f_step[i, j] = gauss_kern(X_train[i, :], X_train[j, :], 0, 0, epsilon)
+        K_y_sigma_f_step += sigma_e**2 * np.identity(num_train)
+
+        dKdsigma_f_finite_diff = (K_y_sigma_f_step - K_y) / epsilon
+        self.assertTrue(np.linalg.norm(grad_dict['sigma_f'].cpu().detach().numpy() - dKdsigma_f_finite_diff) < 1e-5)
+
         # SIGMA_E PARAMETER
-        
+        K_y_sigma_e_step = K + (sigma_e + epsilon)**2 * np.identity(num_train)
+        dKdsigma_e_finite_diff = (K_y_sigma_e_step - K_y) / epsilon
+        self.assertTrue(np.linalg.norm(grad_dict['sigma_n'].cpu().detach().numpy() - dKdsigma_e_finite_diff) < 1e-5)
