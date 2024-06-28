@@ -515,3 +515,40 @@ class TestGaussianProcessRegression(TestCase):
 
         print("Done accumulating data")
         gpr.update_hyperparams()
+
+    def test_distance_matrix_kernel_computation(self):
+        # When num_train = 2000, for-loop takes 90s, torch takes 3.6s.
+        # When num_train = 5000, torch takes 3.6s still.
+        x_dim = 2
+        num_train = 1000
+        sigma_e = 1
+        sigma_f = 1
+        lambdas = np.ones(x_dim)
+        X_train = np.random.standard_normal(size=(num_train, x_dim))
+
+        start = time.time()
+        def gauss_kern(x1, x2):
+            Lambda_inv = np.diag(1 / lambdas)
+            return sigma_f ** 2 * np.exp(-1 / 2 * (x1 - x2).T @ Lambda_inv @ (x1 - x2))
+
+        K = np.zeros((num_train, num_train))
+        for i in range(num_train):
+            for j in range(num_train):
+                K[i, j] = gauss_kern(X_train[i, :], X_train[j, :])
+        end = time.time()
+
+        print("For-loop method: ", end-start)
+
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        X_train = torch.tensor(X_train, device=device)
+        lambdas = torch.tensor(lambdas, device=device)
+
+        torch_start = time.time()
+        X_train_mod = X_train * torch.sqrt(lambdas)
+        dist_mat = torch.cdist(X_train_mod, X_train_mod, p=2)
+        torch_K = torch.exp(-1/2*torch.square(dist_mat))
+        torch_end = time.time()
+
+        print("Torch method: ", torch_end - torch_start)
+
+        self.assertTrue(np.linalg.norm(torch_K.cpu().detach().numpy() - K) < 1e-5)
