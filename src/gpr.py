@@ -112,13 +112,35 @@ class GaussianProcessRegression(object):
 
     def update_hyperparams(self):
         """
-        Find estimate of GP hyperparameters (listed in the constructor) by maximizing
-        the marginal likelihood.
+        Find estimate of GP hyperparameters (listed in the constructor) by running
+        gradient ascent on marginal likelihood. Does num_iters number of iterations
+        unless gradient reaches a local min beforehand.
         """
-        num_iters = 100
+        num_iters = 10
+        alpha = 0.01
         for iter in range(num_iters):
-            grad_dict = self.kernel_matrix_gradient()
-            dml_dtheta = self.marginal_likelihood_grad(grad_dict)
+            print('iter: {}, lambda: {}, sigma_f: {}, sigma_n: {}'.format(iter,
+                                                                          self.Lambda.cpu().detach().numpy(),
+                                                                          self.sigma_f.cpu().detach().numpy(),
+                                                                          self.sigma_e.cpu().detach().numpy()))
+            Ky_grad_dict = self.kernel_matrix_gradient()
+            ml_grad_dict = self.marginal_likelihood_grad(Ky_grad_dict)
+
+            # Update hyperparameters
+            with torch.no_grad():
+                self.Lambda += alpha*ml_grad_dict['lambda']
+                self.sigma_f += alpha*ml_grad_dict['sigma_f']
+                self.sigma_e += alpha*ml_grad_dict['sigma_n']
+
+            norm_sum = (torch.linalg.norm(ml_grad_dict['lambda']) +
+                        torch.linalg.norm(ml_grad_dict['sigma_f']) +
+                        torch.linalg.norm(ml_grad_dict['sigma_n']))
+            if norm_sum.item() < 1e-5:
+                # Some parts of likelihood can be really flat, so maybe should use a different condition?
+                break
+
+            # Update K_f and inverse(K_y)
+            self.build_A_inv_mat()
 
     def kernel_matrix_gradient(self):
         """

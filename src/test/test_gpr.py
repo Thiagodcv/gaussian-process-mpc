@@ -495,3 +495,23 @@ class TestGaussianProcessRegression(TestCase):
         self.assertTrue(np.linalg.norm(dml_dlambda[1] - L2_finite_diff) < 1e-3)
         self.assertTrue(np.linalg.norm(dml_dsigma_f - sigma_f_finite_diff) < 1e-3)
         self.assertTrue(np.linalg.norm(dml_dsigma_n - sigma_e_finite_diff) < 1e-3)
+
+    def test_update_hyperparams(self):
+        """
+        TODO: Major issue, sigma_n becomes negative
+        """
+        x_dim = 2
+        num_train = 100
+        gpr = GaussianProcessRegression(x_dim=x_dim)
+
+        def f(x):
+            return x.T @ x
+
+        X_train = np.random.standard_normal(size=(num_train, x_dim))
+        y_train = np.array([f(X_train[i, :]) for i in range(num_train)])
+
+        for i in range(num_train):
+            gpr.append_train_data(X_train[i, :], y_train[i])
+
+        print("Done accumulating data")
+        gpr.update_hyperparams()
