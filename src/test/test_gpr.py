@@ -552,3 +552,27 @@ class TestGaussianProcessRegression(TestCase):
         print("Torch method: ", torch_end - torch_start)
 
         self.assertTrue(np.linalg.norm(torch_K.cpu().detach().numpy() - K) < 1e-5)
+
+    def test_gradient_matrix_prod(self):
+        # For x_dim = 1,...,10, torch takes around 3.6s
+        x_dim = 1
+        num_train = 1000
+        sigma_e = 1
+        sigma_f = 1
+        lambdas = np.ones(x_dim)
+        X_train = np.random.standard_normal(size=(num_train, x_dim))
+
+        # Compute using Torch
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        X_train = torch.tensor(X_train, device=device)
+        lambdas = torch.tensor(lambdas, device=device)
+
+        torch_start = time.time()
+        A = torch.zeros(size=(num_train, num_train, x_dim), device=device)
+
+        for p in range(x_dim):
+            v = torch.reshape(X_train[:, p], (num_train, 1))
+            A[:, :, p] = 1/(2 * lambdas[p]**2) * torch.cdist(v, v, p=2)
+
+        torch_end = time.time()
+        print("Torch method: ", torch_end-torch_start)
