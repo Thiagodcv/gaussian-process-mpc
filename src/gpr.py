@@ -115,7 +115,10 @@ class GaussianProcessRegression(object):
         Find estimate of GP hyperparameters (listed in the constructor) by maximizing
         the marginal likelihood.
         """
-        pass
+        num_iters = 100
+        for iter in range(num_iters):
+            grad_dict = self.kernel_matrix_gradient()
+            dml_dtheta = self.marginal_likelihood_grad(grad_dict)
 
     def kernel_matrix_gradient(self):
         """
@@ -143,7 +146,6 @@ class GaussianProcessRegression(object):
 
     def marginal_likelihood_grad(self, gradient_dict):
         """
-        TODO: Write a test for this method
         Computes the gradients of the marginal likelihood with respect to lambda_j, sigma_n, and sigma_f.
         Assumes K_f and inverse(K_y) have already been fully updated.
 
@@ -154,11 +156,9 @@ class GaussianProcessRegression(object):
 
         Returns:
         -------
-        (d+2,) tensor
-            The gradient of the marginal likelihood w.r.t hyperparameters. The first d elements are the
-            lambda gradients, then the sigma_f and sigma_n gradients respectively.
+        dict containing gradients in torch.tensor format
         """
-        dml_dtheta = torch.zeros(size=(self.x_dim+2,), device=self.device)
+        dml_dlambda = torch.zeros(size=(self.x_dim,), device=self.device)
         dK_dlambda = gradient_dict['lambda']
         dK_dsigma_f = gradient_dict['sigma_f']
         dK_dsigma_n = gradient_dict['sigma_n']
@@ -166,8 +166,8 @@ class GaussianProcessRegression(object):
         alpha = self.A_inv @ self.y_train
         B = alpha @ alpha.mT - self.A_inv
         for i in range(self.x_dim):
-            dml_dtheta[i] = 1/2*torch.trace(B @ dK_dlambda[:, :, i])
+            dml_dlambda[i] = 1/2*torch.trace(B @ dK_dlambda[:, :, i])
 
-        dml_dtheta[self.x_dim] = 1/2*torch.trace(B @ dK_dsigma_f)
-        dml_dtheta[self.x_dim+1] = 1/2*torch.trace(B @ dK_dsigma_n)
-        return dml_dtheta
+        dml_dsigma_f = 1/2*torch.trace(B @ dK_dsigma_f)
+        dml_dsigma_n = 1/2*torch.trace(B @ dK_dsigma_n)
+        return {'lambda': dml_dlambda, 'sigma_f': dml_dsigma_f, 'sigma_n': dml_dsigma_n}

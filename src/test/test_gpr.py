@@ -424,14 +424,14 @@ class TestGaussianProcessRegression(TestCase):
             gpr.append_train_data(X_train[i, :], y_train[i])
 
         grad_dict = gpr.kernel_matrix_gradient()
-        dml_dtheta = gpr.marginal_likelihood_grad(grad_dict)
-        print(dml_dtheta)
+        dml_dict = gpr.marginal_likelihood_grad(grad_dict)
+        print(dml_dict)
 
         # Now compute all gradients using finite difference and compare
         lambdas = gpr.Lambda.cpu().detach().numpy()
         sigma_f = gpr.sigma_f.cpu().detach().numpy()
         sigma_e = gpr.sigma_e.cpu().detach().numpy()
-        epsilon = 1e-9
+        epsilon = 1e-10
 
         def gauss_kern(x1, x2, e1, e2, e3):
             ers = np.array([e1, e2])
@@ -488,8 +488,10 @@ class TestGaussianProcessRegression(TestCase):
         print(sigma_f_finite_diff)
         print(sigma_e_finite_diff)
 
-        dml_dtheta = dml_dtheta.cpu().detach().numpy()
-        self.assertTrue(np.linalg.norm(dml_dtheta[0] - L1_finite_diff) < 1e-3)
-        self.assertTrue(np.linalg.norm(dml_dtheta[1] - L2_finite_diff) < 1e-3)
-        self.assertTrue(np.linalg.norm(dml_dtheta[2] - sigma_f_finite_diff) < 1e-3)
-        self.assertTrue(np.linalg.norm(dml_dtheta[3] - sigma_e_finite_diff) < 1e-3)
+        dml_dlambda = dml_dict['lambda'].cpu().detach().numpy()
+        dml_dsigma_f = dml_dict['sigma_f'].cpu().detach().numpy()
+        dml_dsigma_n = dml_dict['sigma_n'].cpu().detach().numpy()
+        self.assertTrue(np.linalg.norm(dml_dlambda[0] - L1_finite_diff) < 1e-3)
+        self.assertTrue(np.linalg.norm(dml_dlambda[1] - L2_finite_diff) < 1e-3)
+        self.assertTrue(np.linalg.norm(dml_dsigma_f - sigma_f_finite_diff) < 1e-3)
+        self.assertTrue(np.linalg.norm(dml_dsigma_n - sigma_e_finite_diff) < 1e-3)
