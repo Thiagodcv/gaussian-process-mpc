@@ -554,13 +554,24 @@ class TestGaussianProcessRegression(TestCase):
         self.assertTrue(np.linalg.norm(torch_K.cpu().detach().numpy() - K) < 1e-5)
 
     def test_gradient_matrix_prod(self):
-        # For x_dim = 1,...,10, torch takes around 3.6s
-        x_dim = 1
-        num_train = 1000
+        # For x_dim = 1,...,10, torch takes around 3.6s.
+        # For x_dim = 4, num_train = 2000, for-loop takes 26s.
+        x_dim = 4
+        num_train = 2000
         sigma_e = 1
         sigma_f = 1
         lambdas = np.ones(x_dim)
         X_train = np.random.standard_normal(size=(num_train, x_dim))
+
+        # Compute using for-loops
+        A = np.zeros(shape=(num_train, num_train, x_dim))
+        start = time.time()
+        for i in range(num_train):
+            for j in range(num_train):
+                for p in range(x_dim):
+                    A[i, j, p] = (1/(2 * lambdas[p]**2)) * (X_train[i, p] - X_train[j, p]) ** 2
+        end = time.time()
+        print("For-loop method: ", end-start)
 
         # Compute using Torch
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -568,11 +579,14 @@ class TestGaussianProcessRegression(TestCase):
         lambdas = torch.tensor(lambdas, device=device)
 
         torch_start = time.time()
-        A = torch.zeros(size=(num_train, num_train, x_dim), device=device)
+        A_torch = torch.zeros(size=(num_train, num_train, x_dim), device=device)
 
         for p in range(x_dim):
             v = torch.reshape(X_train[:, p], (num_train, 1))
-            A[:, :, p] = 1/(2 * lambdas[p]**2) * torch.cdist(v, v, p=2)
+            A_torch[:, :, p] = (1/(2 * lambdas[p]**2)) * torch.square(torch.cdist(v, v, p=2))
 
         torch_end = time.time()
         print("Torch method: ", torch_end-torch_start)
+
+        # Some numerical error definitely builds up, but they're roughly the same. 1e-3 = 0.001
+        self.assertTrue(np.linalg.norm(A_torch.cpu().detach().numpy() - A) < 1e-3)
