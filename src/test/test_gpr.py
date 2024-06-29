@@ -523,7 +523,7 @@ class TestGaussianProcessRegression(TestCase):
         num_train = 1000
         sigma_e = 1
         sigma_f = 1
-        lambdas = np.ones(x_dim)
+        lambdas = np.array([1., 0.5])  # Has to have x_dim elements
         X_train = np.random.standard_normal(size=(num_train, x_dim))
 
         start = time.time()
@@ -544,7 +544,7 @@ class TestGaussianProcessRegression(TestCase):
         lambdas = torch.tensor(lambdas, device=device)
 
         torch_start = time.time()
-        X_train_mod = X_train * torch.sqrt(lambdas)
+        X_train_mod = X_train * torch.sqrt(1/lambdas)
         dist_mat = torch.cdist(X_train_mod, X_train_mod, p=2)
         torch_K = torch.exp(-1/2*torch.square(dist_mat))
         torch_end = time.time()
@@ -558,9 +558,7 @@ class TestGaussianProcessRegression(TestCase):
         # For x_dim = 4, num_train = 2000, for-loop takes 26s.
         x_dim = 4
         num_train = 2000
-        sigma_e = 1
-        sigma_f = 1
-        lambdas = np.ones(x_dim)
+        lambdas = np.array([1., 2., 3., 4.])  # Has to have x_dim elements
         X_train = np.random.standard_normal(size=(num_train, x_dim))
 
         # Compute using for-loops
@@ -590,3 +588,41 @@ class TestGaussianProcessRegression(TestCase):
 
         # Some numerical error definitely builds up, but they're roughly the same. 1e-3 = 0.001
         self.assertTrue(np.linalg.norm(A_torch.cpu().detach().numpy() - A) < 1e-3)
+
+    def test_covariance_vector(self):
+        """
+        With num_train=5000, x_dim=4, for-loop takes 0.11s, torch takes 2.09s. Perhaps just for this one, use loop?
+        """
+        x_dim = 4
+        num_train = 5000
+        lambdas = np.array([1., 2., 3., 4.])  # Has to have x_dim elements
+        sigma_f = 1.5
+        X_train = np.random.standard_normal(size=(num_train, x_dim))
+        x_new = np.ones(x_dim)
+
+        # Compute covariance vector k_new using numpy on CPU
+        def gauss_kern(x1, x2):
+            Lambda_inv = np.diag(1 / lambdas)
+            return sigma_f ** 2 * np.exp(-1 / 2 * (x1 - x2).T @ Lambda_inv @ (x1 - x2))
+
+        start = time.time()
+        k_new = np.array([gauss_kern(X_train[i, :], x_new) for i in range(num_train)])
+        end = time.time()
+
+        print("For-loop method: ", end - start)
+
+        # Compute covariance vector k_new using Torch on GPU
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        X_train = torch.tensor(X_train, device=device)
+        lambdas = torch.tensor(lambdas, device=device)
+        x_new = torch.tensor(x_new, device=device)
+
+        torch_start = time.time()
+        X_train_mod = X_train * torch.sqrt(1/lambdas)
+        x_new_mod = x_new * torch.sqrt(1/lambdas)
+        k_new_torch = (sigma_f**2) * torch.exp(-1/2 * torch.sum(torch.square(X_train_mod - x_new_mod), dim=1))
+        torch_end =time.time()
+
+        print("Torch method: ", torch_end - torch_start)
+
+        self.assertTrue(np.linalg.norm(k_new_torch.cpu().detach().numpy() - k_new) < 1e-7)
