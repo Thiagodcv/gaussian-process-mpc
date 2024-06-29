@@ -613,6 +613,7 @@ class TestGaussianProcessRegression(TestCase):
 
         # Compute covariance vector k_new using Torch on GPU
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        print("device: ", device)
         X_train = torch.tensor(X_train, device=device)
         lambdas = torch.tensor(lambdas, device=device)
         x_new = torch.tensor(x_new, device=device)
