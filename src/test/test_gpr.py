@@ -94,9 +94,9 @@ class TestGaussianProcessRegression(TestCase):
         self.assertTrue(np.linalg.norm(C_np - C_blas) < 1e-5)
 
     def test_partition_inverse_formula(self):
-        num_train = 3000
+        num_train = 2000
         sigma_e = 1
-        sigma_f = 1
+        sigma_f = 1.5
         X_train = np.random.standard_normal(size=(num_train, 2))
         x = np.random.standard_normal(size=(2,))
 
@@ -176,7 +176,7 @@ class TestGaussianProcessRegression(TestCase):
     def test_update_A_inv_mat(self):
         num_train = 100
         sigma_e = 1
-        sigma_f = 1
+        sigma_f = 1.5
         X_train = np.random.standard_normal(size=(num_train, 2))
         y_train = np.random.standard_normal(size=(num_train,))
         x = np.random.standard_normal(size=(2,))
@@ -225,7 +225,7 @@ class TestGaussianProcessRegression(TestCase):
         NOTE: The K kernel matrix is K_f, not K_y in the following tests.
         """
         num_train = 3
-        sigma_f = 1.
+        sigma_f = 1.5
         X_train = np.random.standard_normal(size=(num_train, 2))
         lambdas = np.array([1., 2.])
         epsilon = 1e-7
@@ -263,8 +263,8 @@ class TestGaussianProcessRegression(TestCase):
         dKdL1_finite_diff = (K_L1_step - K) / epsilon
         dKdL2_finite_diff = (K_L2_step - K) / epsilon
 
-        print(np.linalg.norm(dKdL1 - dKdL1_finite_diff))
-        print(np.linalg.norm(dKdL2 - dKdL2_finite_diff))
+        self.assertTrue(np.linalg.norm(dKdL1 - dKdL1_finite_diff) < 1e-5)
+        self.assertTrue(np.linalg.norm(dKdL2 - dKdL2_finite_diff) < 1e-5)
 
     def test_sigma_gradient_calculation(self):
         """
@@ -272,7 +272,7 @@ class TestGaussianProcessRegression(TestCase):
         NOTE: The K kernel matrix is K_y in the following tests.
         """
         num_train = 3
-        sigma_f = 1.
+        sigma_f = 1.5
         sigma_e = 0.5
         X_train = np.random.standard_normal(size=(num_train, 2))
         lambdas = np.array([1., 2.])
@@ -304,11 +304,11 @@ class TestGaussianProcessRegression(TestCase):
         dKdsigma_e = 2 * sigma_e * np.identity(num_train)
         dKdsigma_f = 2/sigma_f * K
 
-        print(np.linalg.norm(dKdsigma_e_finite_diff - dKdsigma_e))
-        print(np.linalg.norm(dKdsigma_f_finite_diff - dKdsigma_f))
+        self.assertTrue(np.linalg.norm(dKdsigma_e_finite_diff - dKdsigma_e) < 1e-5)
+        self.assertTrue(np.linalg.norm(dKdsigma_f_finite_diff - dKdsigma_f) < 1e-5)
 
     def test_gradient_calculation_scalar(self):
-        sigma_f = 1.
+        sigma_f = 1.5
         x1 = np.array([5., 6.])
         x2 = np.array([3., 4.])
         lambdas = np.array([1., 2.])
@@ -509,7 +509,7 @@ class TestGaussianProcessRegression(TestCase):
         x_dim = 2
         num_train = 1000
         sigma_e = 1
-        sigma_f = 1
+        sigma_f = 1.5
         lambdas = np.array([1., 0.5])  # Has to have x_dim elements
         X_train = np.random.standard_normal(size=(num_train, x_dim))
 
@@ -534,7 +534,7 @@ class TestGaussianProcessRegression(TestCase):
         torch_start = time.time()
         X_train_mod = X_train * torch.sqrt(1/lambdas)
         dist_mat = torch.cdist(X_train_mod, X_train_mod, p=2)
-        torch_K = torch.exp(-1/2*torch.square(dist_mat))
+        torch_K = (sigma_f ** 2) * torch.exp(-1/2*torch.square(dist_mat))
         torch_end = time.time()
 
         print("Torch method: ", torch_end - torch_start)

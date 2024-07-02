@@ -26,8 +26,8 @@ class GaussianProcessRegression(object):
 
         # Hyperparameters to update via backprop
         self.Lambda = torch.ones(x_dim, device=self.device).type(torch.float32).requires_grad_()
-        self.sigma_e = torch.tensor(1., device=self.device).type(torch.float32).requires_grad_()
-        self.sigma_f = torch.tensor(1., device=self.device).type(torch.float32).requires_grad_()
+        self.sigma_e = torch.tensor(0.75, device=self.device).type(torch.float32).requires_grad_()
+        self.sigma_f = torch.tensor(0.75, device=self.device).type(torch.float32).requires_grad_()
 
         # Optimization
         self.optimizer = torch.optim.LBFGS(params=[self.Lambda, self.sigma_e, self.sigma_f],
@@ -109,7 +109,7 @@ class GaussianProcessRegression(object):
         #         self.K[i, j] = self.se_kernel(self.X_train[i, :], self.X_train[j, :])
         X_train_mod = self.X_train * torch.sqrt(1 / self.Lambda)
         dist_mat = torch.cdist(X_train_mod, X_train_mod, p=2)
-        self.K = torch.exp(-1 / 2 * torch.square(dist_mat))
+        self.K = (self.sigma_f ** 2) * torch.exp(-1 / 2 * torch.square(dist_mat))
 
         self.A_inv = torch.linalg.inv(self.K + self.sigma_e**2 * torch.eye(self.num_train, device=self.device))
 
