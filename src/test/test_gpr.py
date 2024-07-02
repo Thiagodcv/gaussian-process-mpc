@@ -173,10 +173,11 @@ class TestGaussianProcessRegression(TestCase):
 
         self.assertTrue(np.linalg.norm(new_A_inv_ineff - new_A_inv) < 1e-5)
 
-    def test_update_A_inv_mat(self):
+    def test_update_Ky_inv_mat(self):
+        gpr = GaussianProcessRegression(x_dim=2)
         num_train = 100
-        sigma_e = 1
-        sigma_f = 1.5
+        sigma_e = gpr.sigma_n.item()
+        sigma_f = gpr.sigma_f.item()
         X_train = np.random.standard_normal(size=(num_train, 2))
         y_train = np.random.standard_normal(size=(num_train,))
         x = np.random.standard_normal(size=(2,))
@@ -200,24 +201,23 @@ class TestGaussianProcessRegression(TestCase):
         D = np.array([[sigma_e ** 2 + sigma_f ** 2]])
         Q = np.linalg.inv(D - C @ A_inv @ B)
 
-        new_K_inv_top_left = A_inv + A_inv @ B @ Q @ C @ A_inv
-        new_K_inv_top_right = -A_inv @ B @ Q
-        new_K_inv_bottom_left = -Q @ C @ A_inv
-        new_K_inv_bottom_right = Q
+        new_Ky_inv_top_left = A_inv + A_inv @ B @ Q @ C @ A_inv
+        new_Ky_inv_top_right = -A_inv @ B @ Q
+        new_Ky_inv_bottom_left = -Q @ C @ A_inv
+        new_Ky_inv_bottom_right = Q
 
-        new_K_inv_top = np.concatenate((new_K_inv_top_left, new_K_inv_top_right), axis=1)
-        new_K_inv_bottom = np.concatenate((new_K_inv_bottom_left, new_K_inv_bottom_right), axis=1)
-        new_K_inv = np.concatenate((new_K_inv_top, new_K_inv_bottom), axis=0)
+        new_Ky_inv_top = np.concatenate((new_Ky_inv_top_left, new_Ky_inv_top_right), axis=1)
+        new_Ky_inv_bottom = np.concatenate((new_Ky_inv_bottom_left, new_Ky_inv_bottom_right), axis=1)
+        new_Ky_inv = np.concatenate((new_Ky_inv_top, new_Ky_inv_bottom), axis=0)
 
         # Now test to see if GPR leads to same result
-        gpr = GaussianProcessRegression(x_dim=2)
 
         for i in range(num_train):
             gpr.append_train_data(X_train[i, :], y_train[i])
         gpr.append_train_data(x, y)
-        gpr_A_inv = gpr.Ky_inv.cpu().detach().numpy()
+        gpr_Ky_inv = gpr.Ky_inv.cpu().detach().numpy()
 
-        self.assertTrue(np.max(new_K_inv - gpr_A_inv) < 1e-5)
+        self.assertTrue(np.max(new_Ky_inv - gpr_Ky_inv) < 1e-5)
 
     def test_lambda_gradient_calculation(self):
         """
@@ -351,7 +351,7 @@ class TestGaussianProcessRegression(TestCase):
         # Now compute all gradients using finite difference and compare
         lambdas = gpr.lambdas.cpu().detach().numpy()
         sigma_f = gpr.sigma_f.cpu().detach().numpy()
-        sigma_e = gpr.sigma_e.cpu().detach().numpy()
+        sigma_e = gpr.sigma_n.cpu().detach().numpy()
         epsilon = 1e-7
 
         def gauss_kern(x1, x2, e1, e2, e3):
@@ -417,7 +417,7 @@ class TestGaussianProcessRegression(TestCase):
         # Now compute all gradients using finite difference and compare
         lambdas = gpr.lambdas.cpu().detach().numpy()
         sigma_f = gpr.sigma_f.cpu().detach().numpy()
-        sigma_e = gpr.sigma_e.cpu().detach().numpy()
+        sigma_e = gpr.sigma_n.cpu().detach().numpy()
         epsilon = 1e-10
 
         def gauss_kern(x1, x2, e1, e2, e3):
@@ -488,7 +488,7 @@ class TestGaussianProcessRegression(TestCase):
         TODO: Major issue, sigma_n becomes negative
         """
         x_dim = 2
-        num_train = 100
+        num_train = 1000
         gpr = GaussianProcessRegression(x_dim=x_dim)
 
         def f(x):
@@ -498,6 +498,7 @@ class TestGaussianProcessRegression(TestCase):
         y_train = np.array([f(X_train[i, :]) for i in range(num_train)])
 
         for i in range(num_train):
+            print(i)
             gpr.append_train_data(X_train[i, :], y_train[i])
 
         print("Done accumulating data")
