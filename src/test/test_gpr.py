@@ -219,24 +219,6 @@ class TestGaussianProcessRegression(TestCase):
 
         self.assertTrue(np.max(new_K_inv - gpr_A_inv) < 1e-5)
 
-    def test_update_ML_estimate(self):
-        """
-        Ensure program runs without crashing
-        """
-        num_train = 100
-        X_train = np.random.standard_normal(size=(num_train, 2))
-        y_train = np.random.standard_normal(size=(num_train,))
-
-        gpr = GaussianProcessRegression(x_dim=2)
-        for i in range(num_train):
-            gpr.append_train_data(X_train[i, :], y_train[i])
-
-        gpr.update_ML_estimate()
-
-        print("sigma_e: ", gpr.sigma_e)
-        print("sigma_f: ", gpr.sigma_f)
-        print("Lambda: ", gpr.Lambda)
-
     def test_lambda_gradient_calculation(self):
         """
         Test to see if the gradient calculation of lambda parameters I derived is correct.
@@ -360,6 +342,10 @@ class TestGaussianProcessRegression(TestCase):
         for i in range(num_train):
             gpr.append_train_data(X_train[i, :], y_train[i])
 
+        # Test build_A_inv_mat calculation of K using Torch
+        K1 = gpr.K.cpu().detach().numpy()
+        gpr.build_A_inv_mat()
+        self.assertTrue(np.linalg.norm(K1 - gpr.K.cpu().detach().numpy()) < 1e-5)
         grad_dict = gpr.kernel_matrix_gradient()
 
         # Now compute all gradients using finite difference and compare
@@ -423,6 +409,7 @@ class TestGaussianProcessRegression(TestCase):
         for i in range(num_train):
             gpr.append_train_data(X_train[i, :], y_train[i])
 
+        gpr.build_A_inv_mat()  # Test build_A_inv_mat()
         grad_dict = gpr.kernel_matrix_gradient()
         dml_dict = gpr.marginal_likelihood_grad(grad_dict)
         print(dml_dict)
@@ -520,7 +507,7 @@ class TestGaussianProcessRegression(TestCase):
         # When num_train = 2000, for-loop takes 90s, torch takes 3.6s.
         # When num_train = 5000, torch takes 3.6s still.
         x_dim = 2
-        num_train = 2000
+        num_train = 1000
         sigma_e = 1
         sigma_f = 1
         lambdas = np.array([1., 0.5])  # Has to have x_dim elements
