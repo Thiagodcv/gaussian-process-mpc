@@ -520,21 +520,22 @@ class TestGaussianProcessRegression(TestCase):
         # When num_train = 2000, for-loop takes 90s, torch takes 3.6s.
         # When num_train = 5000, torch takes 3.6s still.
         x_dim = 2
-        num_train = 1000
+        num_train = 2000
         sigma_e = 1
         sigma_f = 1
         lambdas = np.array([1., 0.5])  # Has to have x_dim elements
         X_train = np.random.standard_normal(size=(num_train, x_dim))
 
-        start = time.time()
         def gauss_kern(x1, x2):
             Lambda_inv = np.diag(1 / lambdas)
             return sigma_f ** 2 * np.exp(-1 / 2 * (x1 - x2).T @ Lambda_inv @ (x1 - x2))
 
-        K = np.zeros((num_train, num_train))
-        for i in range(num_train):
-            for j in range(num_train):
-                K[i, j] = gauss_kern(X_train[i, :], X_train[j, :])
+        start = time.time()
+        # K = np.zeros((num_train, num_train))
+        # for i in range(num_train):
+        #     for j in range(num_train):
+        #         K[i, j] = gauss_kern(X_train[i, :], X_train[j, :])
+        K = np.array([[gauss_kern(X_train[i, :], X_train[j, :]) for i in range(num_train)] for j in range(num_train)])
         end = time.time()
 
         print("For-loop method: ", end-start)
