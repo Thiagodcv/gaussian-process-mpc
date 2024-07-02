@@ -616,3 +616,53 @@ class TestGaussianProcessRegression(TestCase):
         print("Torch method: ", torch_end - torch_start)
 
         self.assertTrue(np.linalg.norm(k_new_torch.cpu().detach().numpy() - k_new) < 1e-7)
+
+    def test_build_from_scratch(self):
+        """
+        Time to add 1 observation to preexisting covariance matrix: 4.77s.
+        Time to recompute preexisting covariance matrix from scratch: 0.39s.
+        Both using Torch with num_train = 5000.
+        --------------------------------------------------------------------
+        Time to add 1 observation to preexisting covariance matrix: 0.1s.
+        Time to recompute preexisting covariance matrix from scratch: 0.003s.
+        Both using Torch with num_train = 100.
+        """
+        x_dim = 4
+        num_train = 100
+        X_train = np.random.standard_normal(size=(num_train, x_dim))
+        y_train = np.random.standard_normal(size=(num_train, 1))
+        x_new = np.array([[1., 2., 3., 4.]])
+
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        X_train_torch = torch.tensor(X_train, device=device).type(torch.float)
+        y_train_torch = torch.tensor(y_train, device=device).type(torch.float)
+        x_new_torch = torch.tensor(x_new, device=device).type(torch.float)
+        X_train_combined = torch.cat((X_train_torch, x_new_torch), dim=0)
+
+        gpr = GaussianProcessRegression(x_dim=x_dim)
+        gpr.X_train = X_train_torch
+        gpr.y_train = y_train_torch
+        gpr.num_train = num_train
+        gpr.build_Ky_inv_mat()
+
+        # Time how long it takes to add 1 datapoint
+        add1_list = []
+        for i in range(5):
+            start_add1 = time.time()
+            gpr.append_train_data(x=x_new, y=0)
+            end_add1 = time.time()
+            add1_list.append(end_add1 - start_add1)
+
+        print("Time to add 1: ", np.mean(add1_list))
+
+        # Time out long it takes to just build from scratch
+        scratch_list = []
+        for i in range(5):
+            start_scratch = time.time()
+            gpr.X_train = X_train_combined
+            gpr.num_train = num_train + 1
+            gpr.build_Ky_inv_mat()
+            end_scratch = time.time()
+            scratch_list.append(end_scratch - start_scratch)
+
+        print("Time to recompute from scratch: ", np.mean(scratch_list))
