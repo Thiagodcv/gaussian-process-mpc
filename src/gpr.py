@@ -50,26 +50,28 @@ class GaussianProcessRegression(object):
         y = torch.tensor(y, requires_grad=False).type(torch.float32).to(self.device)
 
         if self.num_train == 0:
+            self.num_train += 1
             self.X_train = x
             self.y_train = y
             self.Kf = torch.tensor([[self.se_kernel(x, x)]], requires_grad=False).to(self.device)  # requires_grad?
             self.Ky_inv = 1 / (self.Kf + self.sigma_n ** 2)
         else:
+            self.num_train += 1
             self.X_train = torch.cat((self.X_train, x), dim=0)
             self.y_train = torch.cat((self.y_train, y), dim=0)
 
             # Update A inverse matrix
-            k_new = torch.tensor([self.se_kernel(x, self.X_train[i, :]) for i in range(self.num_train)],
-                                 requires_grad=False).to(self.device)
-            k_new = torch.reshape(k_new, (k_new.shape[0], 1))
-            self.update_Ky_inv_mat(k_new)
+            self.build_Ky_inv_mat()
 
-            # Update covariance matrix K
-            self.Kf = torch.cat((self.Kf, k_new.mT), dim=0)
-            k_new_ext = torch.cat((k_new, torch.tensor([[self.se_kernel(x, x)]]).to(self.device)), dim=0)
-            self.Kf = torch.cat((self.Kf, k_new_ext), dim=1)
-
-        self.num_train += 1
+            # k_new = torch.tensor([self.se_kernel(x, self.X_train[i, :]) for i in range(self.num_train)],
+            #                      requires_grad=False).to(self.device)
+            # k_new = torch.reshape(k_new, (k_new.shape[0], 1))
+            # self.update_Ky_inv_mat(k_new)
+            #
+            # # Update covariance matrix K
+            # self.Kf = torch.cat((self.Kf, k_new.mT), dim=0)
+            # k_new_ext = torch.cat((k_new, torch.tensor([[self.se_kernel(x, x)]]).to(self.device)), dim=0)
+            # self.Kf = torch.cat((self.Kf, k_new_ext), dim=1)
 
     def se_kernel(self, x1, x2):
         """
@@ -83,7 +85,7 @@ class GaussianProcessRegression(object):
 
     def update_Ky_inv_mat(self, k_new):
         """
-        TODO: See if just doing build_Ky_inv_mat is faster.
+        TODO: Simply rebuilding covariance matrix is faster. Don't use this.
         Update A_inv_mat to include a new datapoint in X_train.
         """
         B = k_new
