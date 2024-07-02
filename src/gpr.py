@@ -26,11 +26,11 @@ class GaussianProcessRegression(object):
 
         # Hyperparameters to update via backprop
         self.lambdas = torch.ones(x_dim, device=self.device).type(torch.float32).requires_grad_()
-        self.sigma_e = torch.tensor(0.75, device=self.device).type(torch.float32).requires_grad_()
+        self.sigma_n = torch.tensor(0.75, device=self.device).type(torch.float32).requires_grad_()
         self.sigma_f = torch.tensor(0.75, device=self.device).type(torch.float32).requires_grad_()
 
         # Optimization
-        self.optimizer = torch.optim.LBFGS(params=[self.lambdas, self.sigma_e, self.sigma_f],
+        self.optimizer = torch.optim.LBFGS(params=[self.lambdas, self.sigma_n, self.sigma_f],
                                            lr=1e-1,
                                            max_iter=20)
 
@@ -53,7 +53,7 @@ class GaussianProcessRegression(object):
             self.X_train = x
             self.y_train = y
             self.Kf = torch.tensor([[self.se_kernel(x, x)]], requires_grad=False).to(self.device)  # requires_grad?
-            self.Ky_inv = 1 / (self.Kf + self.sigma_e ** 2)
+            self.Ky_inv = 1 / (self.Kf + self.sigma_n ** 2)
         else:
             self.X_train = torch.cat((self.X_train, x), dim=0)
             self.y_train = torch.cat((self.y_train, y), dim=0)
@@ -83,11 +83,12 @@ class GaussianProcessRegression(object):
 
     def update_Ky_inv_mat(self, k_new):
         """
+        TODO: See if just doing build_Ky_inv_mat is faster.
         Update A_inv_mat to include a new datapoint in X_train.
         """
         B = k_new
         C = k_new.mT
-        D = torch.reshape(self.sigma_e**2 + self.sigma_f**2, (1, 1))
+        D = torch.reshape(self.sigma_n ** 2 + self.sigma_f ** 2, (1, 1))
         Q = 1./(D - C @ self.Ky_inv @ B)  # Just inverting a scalar
 
         new_Ky_inv_top_left = self.Ky_inv + self.Ky_inv @ B @ Q @ C @ self.Ky_inv
@@ -107,11 +108,11 @@ class GaussianProcessRegression(object):
         dist_mat = torch.cdist(X_train_mod, X_train_mod, p=2)
         self.Kf = (self.sigma_f ** 2) * torch.exp(-1 / 2 * torch.square(dist_mat))
 
-        self.Ky_inv = torch.linalg.inv(self.Kf + self.sigma_e ** 2 * torch.eye(self.num_train, device=self.device))
+        self.Ky_inv = torch.linalg.inv(self.Kf + self.sigma_n ** 2 * torch.eye(self.num_train, device=self.device))
 
     def update_hyperparams(self):
         """
-        TODO: Put constraints on sigma_n and sigma_f
+        TODO: Figure out constraints and convergence condition
         Find estimate of GP hyperparameters (listed in the constructor) by running
         gradient ascent on marginal likelihood. Does num_iters number of iterations
         unless gradient reaches a local min beforehand.
@@ -122,22 +123,32 @@ class GaussianProcessRegression(object):
             print('iter: {}, lambda: {}, sigma_f: {}, sigma_n: {}'.format(iter,
                                                                           self.lambdas.cpu().detach().numpy(),
                                                                           self.sigma_f.cpu().detach().numpy(),
-                                                                          self.sigma_e.cpu().detach().numpy()))
+                                                                          self.sigma_n.cpu().detach().numpy()))
             Ky_grad_dict = self.kernel_matrix_gradient()
             ml_grad_dict = self.marginal_likelihood_grad(Ky_grad_dict)
 
             # Update hyperparameters
             with torch.no_grad():
                 self.lambdas += alpha * ml_grad_dict['lambda']
-                # self.sigma_f += alpha*ml_grad_dict['sigma_f']
-                # self.sigma_e += alpha*ml_grad_dict['sigma_n']
-            print('gradient: ', torch.linalg.norm(ml_grad_dict['lambda']))
-            # norm_sum = (torch.linalg.norm(ml_grad_dict['lambda']) +
-            #             torch.linalg.norm(ml_grad_dict['sigma_f']) +
-            #             torch.linalg.norm(ml_grad_dict['sigma_n']))
-            # if norm_sum.item() < 1e-5:
-            #     # Some parts of likelihood can be really flat, so maybe should use a different condition?
-            #     break
+                self.sigma_f += alpha * ml_grad_dict['sigma_f']
+                self.sigma_n += alpha * ml_grad_dict['sigma_n']
+
+                # If sigmas negative set to zero
+                self.lambdas[self.lambdas < 0] = 0.
+                self.sigma_f[self.sigma_f < 0] = 0.
+                self.sigma_n[self.sigma_n < 0] = 0.
+
+            print('lambda gradient norm: ', torch.linalg.norm(ml_grad_dict['lambda']))
+            print('sigma_f gradient: ', ml_grad_dict['sigma_f'])
+            print('sigma_e gradient: ', ml_grad_dict['sigma_n'])
+            print('----------------------------------------------')
+
+            norm_sum = (torch.linalg.norm(ml_grad_dict['lambda']) +
+                        torch.linalg.norm(ml_grad_dict['sigma_f']) +
+                        torch.linalg.norm(ml_grad_dict['sigma_n']))
+            if norm_sum.item() < 1e-5:
+                # Some parts of likelihood can be really flat, so maybe should use a different condition?
+                break
 
             # Update K_f and inverse(K_y)
             self.build_Ky_inv_mat()
@@ -161,7 +172,7 @@ class GaussianProcessRegression(object):
             dK_dlambda[:, :, k] = torch.multiply(self.Kf, A[:, :, k])
 
         dK_dsigma_f = 2 / self.sigma_f * self.Kf
-        dK_dsigma_n = 2 * self.sigma_e * torch.eye(self.num_train, device=self.device)
+        dK_dsigma_n = 2 * self.sigma_n * torch.eye(self.num_train, device=self.device)
 
         return {'lambda': dK_dlambda, 'sigma_f': dK_dsigma_f, 'sigma_n': dK_dsigma_n}
 
