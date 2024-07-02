@@ -19,18 +19,18 @@ class GaussianProcessRegression(object):
         self.X_train = None
 
         # Covariance matrix
-        self.K = None
+        self.Kf = None
 
         # Inverse of covariance matrix plus variance of noise "the A-inverse matrix"
-        self.A_inv = None
+        self.Ky_inv = None
 
         # Hyperparameters to update via backprop
-        self.Lambda = torch.ones(x_dim, device=self.device).type(torch.float32).requires_grad_()
+        self.lambdas = torch.ones(x_dim, device=self.device).type(torch.float32).requires_grad_()
         self.sigma_e = torch.tensor(0.75, device=self.device).type(torch.float32).requires_grad_()
         self.sigma_f = torch.tensor(0.75, device=self.device).type(torch.float32).requires_grad_()
 
         # Optimization
-        self.optimizer = torch.optim.LBFGS(params=[self.Lambda, self.sigma_e, self.sigma_f],
+        self.optimizer = torch.optim.LBFGS(params=[self.lambdas, self.sigma_e, self.sigma_f],
                                            lr=1e-1,
                                            max_iter=20)
 
@@ -52,8 +52,8 @@ class GaussianProcessRegression(object):
         if self.num_train == 0:
             self.X_train = x
             self.y_train = y
-            self.K = torch.tensor([[self.se_kernel(x, x)]], requires_grad=False).to(self.device)  # requires_grad?
-            self.A_inv = 1/(self.K + self.sigma_e**2)
+            self.Kf = torch.tensor([[self.se_kernel(x, x)]], requires_grad=False).to(self.device)  # requires_grad?
+            self.Ky_inv = 1 / (self.Kf + self.sigma_e ** 2)
         else:
             self.X_train = torch.cat((self.X_train, x), dim=0)
             self.y_train = torch.cat((self.y_train, y), dim=0)
@@ -62,12 +62,12 @@ class GaussianProcessRegression(object):
             k_new = torch.tensor([self.se_kernel(x, self.X_train[i, :]) for i in range(self.num_train)],
                                  requires_grad=False).to(self.device)
             k_new = torch.reshape(k_new, (k_new.shape[0], 1))
-            self.update_A_inv_mat(k_new)
+            self.update_Ky_inv_mat(k_new)
 
             # Update covariance matrix K
-            self.K = torch.cat((self.K, k_new.mT), dim=0)
+            self.Kf = torch.cat((self.Kf, k_new.mT), dim=0)
             k_new_ext = torch.cat((k_new, torch.tensor([[self.se_kernel(x, x)]]).to(self.device)), dim=0)
-            self.K = torch.cat((self.K, k_new_ext), dim=1)
+            self.Kf = torch.cat((self.Kf, k_new_ext), dim=1)
 
         self.num_train += 1
 
@@ -77,41 +77,37 @@ class GaussianProcessRegression(object):
         """
         x1 = torch.squeeze(x1)
         x2 = torch.squeeze(x2)
-        inv_lambda = torch.diag(1/self.Lambda)
+        inv_lambda = torch.diag(1 / self.lambdas)
 
         return (self.sigma_f**2) * torch.exp(-1/2 * (x1 - x2) @ inv_lambda @ (x1 - x2))
 
-    def update_A_inv_mat(self, k_new):
+    def update_Ky_inv_mat(self, k_new):
         """
         Update A_inv_mat to include a new datapoint in X_train.
         """
         B = k_new
         C = k_new.mT
         D = torch.reshape(self.sigma_e**2 + self.sigma_f**2, (1, 1))
-        Q = 1./(D - C @ self.A_inv @ B)  # Just inverting a scalar
+        Q = 1./(D - C @ self.Ky_inv @ B)  # Just inverting a scalar
 
-        new_A_inv_top_left = self.A_inv + self.A_inv @ B @ Q @ C @ self.A_inv
-        new_A_inv_top_right = -self.A_inv @ B @ Q
-        new_A_inv_bottom_left = -Q @ C @ self.A_inv
-        new_A_inv_bottom_right = Q
+        new_Ky_inv_top_left = self.Ky_inv + self.Ky_inv @ B @ Q @ C @ self.Ky_inv
+        new_Ky_inv_top_right = -self.Ky_inv @ B @ Q
+        new_Ky_inv_bottom_left = -Q @ C @ self.Ky_inv
+        new_Ky_inv_bottom_right = Q
 
-        new_A_inv_top = torch.cat((new_A_inv_top_left, new_A_inv_top_right), dim=1)
-        new_A_inv_bottom = torch.cat((new_A_inv_bottom_left, new_A_inv_bottom_right), dim=1)
-        self.A_inv = torch.cat((new_A_inv_top, new_A_inv_bottom), dim=0)
+        new_Ky_inv_top = torch.cat((new_Ky_inv_top_left, new_Ky_inv_top_right), dim=1)
+        new_Ky_inv_bottom = torch.cat((new_Ky_inv_bottom_left, new_Ky_inv_bottom_right), dim=1)
+        self.Ky_inv = torch.cat((new_Ky_inv_top, new_Ky_inv_bottom), dim=0)
 
-    def build_A_inv_mat(self):
+    def build_Ky_inv_mat(self):
         """
         Builds A_inv from scratch using training data.
         """
-        # self.K = torch.zeros(size=self.K.shape, device=self.device, requires_grad=False).type(torch.float32)
-        # for i in range(self.num_train):
-        #     for j in range(self.num_train):
-        #         self.K[i, j] = self.se_kernel(self.X_train[i, :], self.X_train[j, :])
-        X_train_mod = self.X_train * torch.sqrt(1 / self.Lambda)
+        X_train_mod = self.X_train * torch.sqrt(1 / self.lambdas)
         dist_mat = torch.cdist(X_train_mod, X_train_mod, p=2)
-        self.K = (self.sigma_f ** 2) * torch.exp(-1 / 2 * torch.square(dist_mat))
+        self.Kf = (self.sigma_f ** 2) * torch.exp(-1 / 2 * torch.square(dist_mat))
 
-        self.A_inv = torch.linalg.inv(self.K + self.sigma_e**2 * torch.eye(self.num_train, device=self.device))
+        self.Ky_inv = torch.linalg.inv(self.Kf + self.sigma_e ** 2 * torch.eye(self.num_train, device=self.device))
 
     def update_hyperparams(self):
         """
@@ -124,7 +120,7 @@ class GaussianProcessRegression(object):
         alpha = 0.01
         for iter in range(num_iters):
             print('iter: {}, lambda: {}, sigma_f: {}, sigma_n: {}'.format(iter,
-                                                                          self.Lambda.cpu().detach().numpy(),
+                                                                          self.lambdas.cpu().detach().numpy(),
                                                                           self.sigma_f.cpu().detach().numpy(),
                                                                           self.sigma_e.cpu().detach().numpy()))
             Ky_grad_dict = self.kernel_matrix_gradient()
@@ -132,7 +128,7 @@ class GaussianProcessRegression(object):
 
             # Update hyperparameters
             with torch.no_grad():
-                self.Lambda += alpha*ml_grad_dict['lambda']
+                self.lambdas += alpha * ml_grad_dict['lambda']
                 # self.sigma_f += alpha*ml_grad_dict['sigma_f']
                 # self.sigma_e += alpha*ml_grad_dict['sigma_n']
             print('gradient: ', torch.linalg.norm(ml_grad_dict['lambda']))
@@ -144,7 +140,7 @@ class GaussianProcessRegression(object):
             #     break
 
             # Update K_f and inverse(K_y)
-            self.build_A_inv_mat()
+            self.build_Ky_inv_mat()
 
     def kernel_matrix_gradient(self):
         """
@@ -156,20 +152,15 @@ class GaussianProcessRegression(object):
         dict containing gradients in torch.tensor format
         """
         A = torch.zeros((self.num_train, self.num_train, self.x_dim), device=self.device)
-        # for i in range(self.num_train):
-        #     for j in range(self.num_train):
-        #         for k in range(self.x_dim):
-        #             A[i, j, k] = (1 / (2 * self.Lambda[k] ** 2)) * (self.X_train[i, k] - self.X_train[j, k]) ** 2
-
         for k in range(self.x_dim):
             v = torch.reshape(self.X_train[:, k], (self.num_train, 1))
-            A[:, :, k] = (1/(2 * self.Lambda[k]**2)) * torch.square(torch.cdist(v, v, p=2))
+            A[:, :, k] = (1 / (2 * self.lambdas[k] ** 2)) * torch.square(torch.cdist(v, v, p=2))
 
         dK_dlambda = torch.zeros((self.num_train, self.num_train, self.x_dim), device=self.device)
         for k in range(self.x_dim):
-            dK_dlambda[:, :, k] = torch.multiply(self.K, A[:, :, k])
+            dK_dlambda[:, :, k] = torch.multiply(self.Kf, A[:, :, k])
 
-        dK_dsigma_f = 2 / self.sigma_f * self.K
+        dK_dsigma_f = 2 / self.sigma_f * self.Kf
         dK_dsigma_n = 2 * self.sigma_e * torch.eye(self.num_train, device=self.device)
 
         return {'lambda': dK_dlambda, 'sigma_f': dK_dsigma_f, 'sigma_n': dK_dsigma_n}
@@ -193,8 +184,8 @@ class GaussianProcessRegression(object):
         dK_dsigma_f = gradient_dict['sigma_f']
         dK_dsigma_n = gradient_dict['sigma_n']
 
-        alpha = self.A_inv @ self.y_train
-        B = alpha @ alpha.mT - self.A_inv
+        alpha = self.Ky_inv @ self.y_train
+        B = alpha @ alpha.mT - self.Ky_inv
         for i in range(self.x_dim):
             dml_dlambda[i] = 1/2*torch.trace(B @ dK_dlambda[:, :, i])
 

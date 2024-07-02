@@ -215,7 +215,7 @@ class TestGaussianProcessRegression(TestCase):
         for i in range(num_train):
             gpr.append_train_data(X_train[i, :], y_train[i])
         gpr.append_train_data(x, y)
-        gpr_A_inv = gpr.A_inv.cpu().detach().numpy()
+        gpr_A_inv = gpr.Ky_inv.cpu().detach().numpy()
 
         self.assertTrue(np.max(new_K_inv - gpr_A_inv) < 1e-5)
 
@@ -343,13 +343,13 @@ class TestGaussianProcessRegression(TestCase):
             gpr.append_train_data(X_train[i, :], y_train[i])
 
         # Test build_A_inv_mat calculation of K using Torch
-        K1 = gpr.K.cpu().detach().numpy()
-        gpr.build_A_inv_mat()
-        self.assertTrue(np.linalg.norm(K1 - gpr.K.cpu().detach().numpy()) < 1e-5)
+        K1 = gpr.Kf.cpu().detach().numpy()
+        gpr.build_Ky_inv_mat()
+        self.assertTrue(np.linalg.norm(K1 - gpr.Kf.cpu().detach().numpy()) < 1e-5)
         grad_dict = gpr.kernel_matrix_gradient()
 
         # Now compute all gradients using finite difference and compare
-        lambdas = gpr.Lambda.cpu().detach().numpy()
+        lambdas = gpr.lambdas.cpu().detach().numpy()
         sigma_f = gpr.sigma_f.cpu().detach().numpy()
         sigma_e = gpr.sigma_e.cpu().detach().numpy()
         epsilon = 1e-7
@@ -409,13 +409,13 @@ class TestGaussianProcessRegression(TestCase):
         for i in range(num_train):
             gpr.append_train_data(X_train[i, :], y_train[i])
 
-        gpr.build_A_inv_mat()  # Test build_A_inv_mat()
+        gpr.build_Ky_inv_mat()  # Test build_A_inv_mat()
         grad_dict = gpr.kernel_matrix_gradient()
         dml_dict = gpr.marginal_likelihood_grad(grad_dict)
         print(dml_dict)
 
         # Now compute all gradients using finite difference and compare
-        lambdas = gpr.Lambda.cpu().detach().numpy()
+        lambdas = gpr.lambdas.cpu().detach().numpy()
         sigma_f = gpr.sigma_f.cpu().detach().numpy()
         sigma_e = gpr.sigma_e.cpu().detach().numpy()
         epsilon = 1e-10
