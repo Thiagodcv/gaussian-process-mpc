@@ -492,8 +492,8 @@ class TestGaussianProcessRegression(TestCase):
         """
         gpr = GaussianProcessRegression(x_dim=2)
         num_train = 100
-        sigma_e = gpr.sigma_n.item()
-        sigma_f = gpr.sigma_f.item()
+        sigma_e = torch.exp(gpr.log_sigma_n).item()
+        sigma_f = torch.exp(gpr.log_sigma_f).item()
         X_train = np.random.standard_normal(size=(num_train, 2))
         y_train = np.random.standard_normal(size=(num_train,))
         x = np.random.standard_normal(size=(2,))
@@ -555,9 +555,9 @@ class TestGaussianProcessRegression(TestCase):
         grad_dict = gpr.kernel_matrix_gradient()
 
         # Now compute all gradients using finite difference and compare
-        lambdas = gpr.lambdas.cpu().detach().numpy()
-        sigma_f = gpr.sigma_f.cpu().detach().numpy()
-        sigma_e = gpr.sigma_n.cpu().detach().numpy()
+        lambdas = torch.exp(gpr.log_lambdas).cpu().detach().numpy()
+        sigma_f = torch.exp(gpr.log_sigma_f).cpu().detach().numpy()
+        sigma_e = torch.exp(gpr.log_sigma_n).cpu().detach().numpy()
         epsilon = 1e-7
 
         def gauss_kern(x1, x2, e1, e2, e3):
@@ -624,9 +624,9 @@ class TestGaussianProcessRegression(TestCase):
         print(dml_dict)
 
         # Now compute all gradients using finite difference and compare
-        lambdas = gpr.lambdas.cpu().detach().numpy()
-        sigma_f = gpr.sigma_f.cpu().detach().numpy()
-        sigma_e = gpr.sigma_n.cpu().detach().numpy()
+        lambdas = torch.exp(gpr.log_lambdas).cpu().detach().numpy()
+        sigma_f = torch.exp(gpr.log_sigma_f).cpu().detach().numpy()
+        sigma_e = torch.exp(gpr.log_sigma_n).cpu().detach().numpy()
         epsilon = 1e-10
 
         def gauss_kern(x1, x2, e1, e2, e3):
