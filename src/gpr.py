@@ -21,7 +21,8 @@ class GaussianProcessRegression(object):
         # Covariance matrix
         self.Kf = None
 
-        # Inverse of covariance matrix plus variance of noise "the A-inverse matrix"
+        # Covariance matrix plus variance of noise, and its inverse
+        self.Ky = None
         self.Ky_inv = None
 
         # Hyperparameters to update via backprop
@@ -55,7 +56,8 @@ class GaussianProcessRegression(object):
             self.X_train = x
             self.y_train = y
             self.Kf = torch.tensor([[self.se_kernel(x, x)]], requires_grad=False).to(self.device)  # requires_grad?
-            self.Ky_inv = 1 / (self.Kf + torch.exp(self.log_sigma_n) ** 2)
+            self.Ky = self.Kf + torch.exp(self.log_sigma_n) ** 2
+            self.Ky_inv = 1 / self.Ky
         else:
             self.num_train += 1
             self.X_train = torch.cat((self.X_train, x), dim=0)
@@ -101,7 +103,7 @@ class GaussianProcessRegression(object):
 
     def build_Ky_inv_mat(self):
         """
-        Builds A_inv from scratch using training data.
+        Builds Kf, Ky, and Ky_inv from scratch using training data.
         """
         lambdas = torch.exp(self.log_lambdas)
         sigma_f = torch.exp(self.log_sigma_f)
@@ -110,8 +112,8 @@ class GaussianProcessRegression(object):
         X_train_mod = self.X_train * torch.sqrt(1 / lambdas)
         dist_mat = torch.cdist(X_train_mod, X_train_mod, p=2)
         self.Kf = (sigma_f ** 2) * torch.exp(-1 / 2 * torch.square(dist_mat))
-
-        self.Ky_inv = torch.linalg.inv(self.Kf + sigma_n ** 2 * torch.eye(self.num_train, device=self.device))
+        self.Ky = self.Kf + sigma_n ** 2 * torch.eye(self.num_train, device=self.device)
+        self.Ky_inv = torch.linalg.inv(self.Ky)
 
     def kernel_matrix_gradient(self):
         """
@@ -168,5 +170,18 @@ class GaussianProcessRegression(object):
         dml_dsigma_n = 1/2*torch.trace(B @ dK_dsigma_n)
         return {'lambda': dml_dlambda, 'sigma_f': dml_dsigma_f, 'sigma_n': dml_dsigma_n}
 
+    def compute_marginal_likelihood(self):
+        """
+        Computes and returns the marginal likelihood.
+        """
+        return (-1/2 * self.y_train.mT @ self.Ky_inv @ self.y_train -
+                1/2 * torch.log(torch.linalg.det(self.Ky)) -
+                self.num_train/2 * np.log(2*np.pi))
+
     def update_hyperparams(self, num_iters=10):
-        pass
+        for i in range(num_iters):
+            self.optimizer.zero_grad()
+            ml = self.compute_marginal_likelihood()
+            ml.backward()
+            self.optimizer.step()
+            self.build_Ky_inv_mat()
