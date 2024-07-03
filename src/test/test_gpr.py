@@ -15,7 +15,10 @@ class TestGaussianProcessRegression(TestCase):
         pass
 
     def test_matrix_inverse(self):
-        # Results: 1000: 0.11s, 2000: 0.53s, 3000: 1.45s
+        """
+        Test how long it takes to inverse a matrix inverse using NumPy.
+        Results: 1000: 0.11s, 2000: 0.53s, 3000: 1.45s
+        """
         avg_time = []
         n_trials = 20
         for i in range(1, 3 + 1):
@@ -31,17 +34,22 @@ class TestGaussianProcessRegression(TestCase):
         print(avg_time)
 
     def test_torch_matrix_inverse(self):
-        # Results:
-        # 1000: 0.39s
-        # 2000: 0.087s
-        # 3000: 0.17s
-        # 4000: 0.31s
-        # 5000: 0.47s
-        # 6000: 0.66s
-        # 7000: 0.89s
-        # 8000: 1.12s
-        # 9000: 1.55s
-        # 10_000: 2.01s
+        """
+        Test how long it takes to inverse a matrix using Torch + GPU.
+
+        Results:
+        -------
+        1000: 0.39s
+        2000: 0.087s
+        3000: 0.17s
+        4000: 0.31s
+        5000: 0.47s
+        6000: 0.66s
+        7000: 0.89s
+        8000: 1.12s
+        9000: 1.55s
+        10_000: 2.01s
+        """
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         avg_time = []
         n_trials = 20
@@ -59,9 +67,14 @@ class TestGaussianProcessRegression(TestCase):
         print(avg_time)
 
     def test_pytorch_mat_mult(self):
-        # For multiplying two (10_000, 10_000) matrices, cuda+torch on average takes 0.8s (after first multiply)
-        # numpy on average takes 8.2s, and blas on average takes 6s. Tiny bit of numerical discrepancy between numpy
-        # and blas.
+        """
+        Test how long matrix multiplication takes using Torch + GPU, NumPy, and SciPy.blas.
+
+        For multiplying two (10_000, 10_000) matrices, cuda+torch on average takes 0.8s (after first multiply)
+        numpy on average takes 8.2s, and blas on average takes 6s. Tiny bit of numerical discrepancy between numpy
+        and blas.
+        """
+
         A = torch.normal(mean=0, std=1, size=(10_000, 10_000), device='cuda')
         B = torch.normal(mean=0, std=1, size=(10_000, 10_000), device='cuda')
 
@@ -94,6 +107,9 @@ class TestGaussianProcessRegression(TestCase):
         self.assertTrue(np.linalg.norm(C_np - C_blas) < 1e-5)
 
     def test_partition_inverse_formula(self):
+        """
+        Test to see if inverse formula for 2x2 block matrices holds in the context of Gaussian Process Regression.
+        """
         num_train = 2000
         sigma_e = 1
         sigma_f = 1.5
@@ -143,6 +159,9 @@ class TestGaussianProcessRegression(TestCase):
         self.assertTrue(np.linalg.norm(new_K_inv - new_K_inv_ineff) < 1e-4)
 
     def test_partition_inverse_formula_simple(self):
+        """
+        Test to see if inverse formula for 2x2 block matrices holds.
+        """
         A = np.array([[1., 0.],
                       [3., 3.]])
 
@@ -173,52 +192,6 @@ class TestGaussianProcessRegression(TestCase):
 
         self.assertTrue(np.linalg.norm(new_A_inv_ineff - new_A_inv) < 1e-5)
 
-    def test_update_Ky_inv_mat(self):
-        gpr = GaussianProcessRegression(x_dim=2)
-        num_train = 100
-        sigma_e = gpr.sigma_n.item()
-        sigma_f = gpr.sigma_f.item()
-        X_train = np.random.standard_normal(size=(num_train, 2))
-        y_train = np.random.standard_normal(size=(num_train,))
-        x = np.random.standard_normal(size=(2,))
-        y = np.random.standard_normal(size=(1,))
-
-        def gauss_kern(x1, x2):
-            return sigma_f ** 2 * np.exp(-1 / 2 * (x1 - x2).T @ (x1 - x2))
-
-        K = np.zeros((num_train, num_train))
-        for i in range(num_train):
-            for j in range(num_train):
-                K[i, j] = gauss_kern(X_train[i, :], X_train[j, :])
-
-        k_new = np.array([gauss_kern(x, X_train[i, :]) for i in range(X_train.shape[0])])
-        k_new = np.reshape(k_new, (num_train, 1))
-
-        A = K + (sigma_e ** 2) * np.identity(num_train)
-        A_inv = np.linalg.inv(A)
-        B = k_new
-        C = k_new.T
-        D = np.array([[sigma_e ** 2 + sigma_f ** 2]])
-        Q = np.linalg.inv(D - C @ A_inv @ B)
-
-        new_Ky_inv_top_left = A_inv + A_inv @ B @ Q @ C @ A_inv
-        new_Ky_inv_top_right = -A_inv @ B @ Q
-        new_Ky_inv_bottom_left = -Q @ C @ A_inv
-        new_Ky_inv_bottom_right = Q
-
-        new_Ky_inv_top = np.concatenate((new_Ky_inv_top_left, new_Ky_inv_top_right), axis=1)
-        new_Ky_inv_bottom = np.concatenate((new_Ky_inv_bottom_left, new_Ky_inv_bottom_right), axis=1)
-        new_Ky_inv = np.concatenate((new_Ky_inv_top, new_Ky_inv_bottom), axis=0)
-
-        # Now test to see if GPR leads to same result
-
-        for i in range(num_train):
-            gpr.append_train_data(X_train[i, :], y_train[i])
-        gpr.append_train_data(x, y)
-        gpr_Ky_inv = gpr.Ky_inv.cpu().detach().numpy()
-
-        self.assertTrue(np.max(new_Ky_inv - gpr_Ky_inv) < 1e-5)
-
     def test_lambda_gradient_calculation(self):
         """
         Test to see if the gradient calculation of lambda parameters I derived is correct.
@@ -244,7 +217,7 @@ class TestGaussianProcessRegression(TestCase):
         for i in range(num_train):
             for j in range(num_train):
                 for k in range(2):
-                    A[i, j, k] = (1/(2*lambdas[k]**2)) * (X_train[i, k] - X_train[j, k])**2
+                    A[i, j, k] = (1 / (2 * lambdas[k] ** 2)) * (X_train[i, k] - X_train[j, k]) ** 2
 
         dKdL1 = np.multiply(K, A[:, :, 0])
         dKdL2 = np.multiply(K, A[:, :, 1])
@@ -307,7 +280,10 @@ class TestGaussianProcessRegression(TestCase):
         self.assertTrue(np.linalg.norm(dKdsigma_e_finite_diff - dKdsigma_e) < 1e-5)
         self.assertTrue(np.linalg.norm(dKdsigma_f_finite_diff - dKdsigma_f) < 1e-5)
 
-    def test_gradient_calculation_scalar(self):
+    def test_lambda_gradient_calculation_scalar(self):
+        """
+        Test to see if gradient calculation of lambda parameters I derived is correct.
+        """
         sigma_f = 1.5
         x1 = np.array([5., 6.])
         x2 = np.array([3., 4.])
@@ -325,14 +301,244 @@ class TestGaussianProcessRegression(TestCase):
         dkdl1_fin_diff = (k_l1_step - k)/epsilon
         dkdl2_fin_diff = (k_l2_step - k)/epsilon
 
-        # Derivative is clearly wrong.
         dkdl1 = k * (1/(2 * lambdas[0]**2)) * (x1[0] - x2[0])**2
         dkdl2 = k * (1/(2 * lambdas[1]**2)) * (x1[1] - x2[1])**2
 
         print(dkdl1 - dkdl1_fin_diff)
         print(dkdl2 - dkdl2_fin_diff)
 
+    def test_covariance_computation_time(self):
+        """
+        Test how long it takes to compute the covariance matrix using NumPy
+        vs Torch + GPU.
+
+        When num_train = 2000, for-loop takes 90s, torch takes 3.6s.
+        When num_train = 5000, torch takes 3.6s still.
+        """
+        x_dim = 2
+        num_train = 1000
+        sigma_e = 1
+        sigma_f = 1.5
+        lambdas = np.array([1., 0.5])  # Has to have x_dim elements
+        X_train = np.random.standard_normal(size=(num_train, x_dim))
+
+        def gauss_kern(x1, x2):
+            Lambda_inv = np.diag(1 / lambdas)
+            return sigma_f ** 2 * np.exp(-1 / 2 * (x1 - x2).T @ Lambda_inv @ (x1 - x2))
+
+        start = time.time()
+        # K = np.zeros((num_train, num_train))
+        # for i in range(num_train):
+        #     for j in range(num_train):
+        #         K[i, j] = gauss_kern(X_train[i, :], X_train[j, :])
+        K = np.array([[gauss_kern(X_train[i, :], X_train[j, :]) for i in range(num_train)] for j in range(num_train)])
+        end = time.time()
+
+        print("For-loop method: ", end - start)
+
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        X_train = torch.tensor(X_train, device=device)
+        lambdas = torch.tensor(lambdas, device=device)
+
+        torch_start = time.time()
+        X_train_mod = X_train * torch.sqrt(1 / lambdas)
+        dist_mat = torch.cdist(X_train_mod, X_train_mod, p=2)
+        torch_K = (sigma_f ** 2) * torch.exp(-1 / 2 * torch.square(dist_mat))
+        torch_end = time.time()
+
+        print("Torch method: ", torch_end - torch_start)
+
+        self.assertTrue(np.linalg.norm(torch_K.cpu().detach().numpy() - K) < 1e-5)
+
+    def test_A_matrix_computation_time(self):
+        """
+        Test how long it takes to compute the A matrix found in the kernel_matrix_gradient() method using NumPy
+        vs Torch + GPU.
+        """
+        # For x_dim = 1,...,10, torch takes around 3.6s.
+        # For x_dim = 4, num_train = 2000, for-loop takes 26s.
+        x_dim = 4
+        num_train = 2000
+        lambdas = np.array([1., 2., 3., 4.])  # Has to have x_dim elements
+        X_train = np.random.standard_normal(size=(num_train, x_dim))
+
+        # Compute using for-loops
+        A = np.zeros(shape=(num_train, num_train, x_dim))
+        start = time.time()
+        for i in range(num_train):
+            for j in range(num_train):
+                for p in range(x_dim):
+                    A[i, j, p] = (1/(2 * lambdas[p]**2)) * (X_train[i, p] - X_train[j, p]) ** 2
+        end = time.time()
+        print("For-loop method: ", end-start)
+
+        # Compute using Torch
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        X_train = torch.tensor(X_train, device=device)
+        lambdas = torch.tensor(lambdas, device=device)
+
+        torch_start = time.time()
+        A_torch = torch.zeros(size=(num_train, num_train, x_dim), device=device)
+
+        for p in range(x_dim):
+            v = torch.reshape(X_train[:, p], (num_train, 1))
+            A_torch[:, :, p] = (1/(2 * lambdas[p]**2)) * torch.square(torch.cdist(v, v, p=2))
+
+        torch_end = time.time()
+        print("Torch method: ", torch_end-torch_start)
+
+        # Some numerical error definitely builds up, but they're roughly the same. 1e-3 = 0.001
+        self.assertTrue(np.linalg.norm(A_torch.cpu().detach().numpy() - A) < 1e-3)
+
+    def test_covariance_vector(self):
+        """
+        Test how long it takes to compute a vector of covariances between a new test data and training data.
+        With num_train=5000, x_dim=4, for-loop takes 0.11s, torch takes 2.09s. Perhaps just for this one, use loop?
+        """
+        x_dim = 4
+        num_train = 5000
+        lambdas = np.array([1., 2., 3., 4.])  # Has to have x_dim elements
+        sigma_f = 1.5
+        X_train = np.random.standard_normal(size=(num_train, x_dim))
+        x_new = np.ones(x_dim)
+
+        # Compute covariance vector k_new using numpy on CPU
+        def gauss_kern(x1, x2):
+            Lambda_inv = np.diag(1 / lambdas)
+            return sigma_f ** 2 * np.exp(-1 / 2 * (x1 - x2).T @ Lambda_inv @ (x1 - x2))
+
+        start = time.time()
+        k_new = np.array([gauss_kern(X_train[i, :], x_new) for i in range(num_train)])
+        end = time.time()
+
+        print("For-loop method: ", end - start)
+
+        # Compute covariance vector k_new using Torch on GPU
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        print("device: ", device)
+        X_train = torch.tensor(X_train, device=device)
+        lambdas = torch.tensor(lambdas, device=device)
+        x_new = torch.tensor(x_new, device=device)
+
+        torch_start = time.time()
+        X_train_mod = X_train * torch.sqrt(1/lambdas)
+        x_new_mod = x_new * torch.sqrt(1/lambdas)
+        k_new_torch = (sigma_f**2) * torch.exp(-1/2 * torch.sum(torch.square(X_train_mod - x_new_mod), dim=1))
+        torch_end =time.time()
+
+        print("Torch method: ", torch_end - torch_start)
+
+        self.assertTrue(np.linalg.norm(k_new_torch.cpu().detach().numpy() - k_new) < 1e-7)
+
+    def test_build_covariance_from_scratch(self):
+        """
+        Test which is faster: using the 2x2 block inverse formula to update the covariance matrix, or simply
+        building the covariance from scratch. PyTorch used in both cases.
+
+        Time to add 1 observation to preexisting covariance matrix: 4.77s.
+        Time to recompute preexisting covariance matrix from scratch: 0.39s.
+        Both using Torch with num_train = 5000.
+        --------------------------------------------------------------------
+        Time to add 1 observation to preexisting covariance matrix: 0.1s.
+        Time to recompute preexisting covariance matrix from scratch: 0.003s.
+        Both using Torch with num_train = 100.
+        """
+        x_dim = 4
+        num_train = 5000
+        X_train = np.random.standard_normal(size=(num_train, x_dim))
+        y_train = np.random.standard_normal(size=(num_train, 1))
+        x_new = np.array([[1., 2., 3., 4.]])
+
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        X_train_torch = torch.tensor(X_train, device=device).type(torch.float)
+        y_train_torch = torch.tensor(y_train, device=device).type(torch.float)
+        x_new_torch = torch.tensor(x_new, device=device).type(torch.float)
+        X_train_combined = torch.cat((X_train_torch, x_new_torch), dim=0)
+
+        gpr = GaussianProcessRegression(x_dim=x_dim)
+        gpr.X_train = X_train_torch
+        gpr.y_train = y_train_torch
+        gpr.num_train = num_train
+        gpr.build_Ky_inv_mat()
+
+        # Time how long it takes to add 1 datapoint
+        add1_list = []
+        for i in range(5):
+            start_add1 = time.time()
+            gpr.append_train_data(x=x_new, y=0)
+            end_add1 = time.time()
+            add1_list.append(end_add1 - start_add1)
+
+        print("Time to add 1: ", np.mean(add1_list))
+
+        # Time out long it takes to just build from scratch
+        scratch_list = []
+        for i in range(5):
+            start_scratch = time.time()
+            gpr.X_train = X_train_combined
+            gpr.num_train = num_train + 1
+            gpr.build_Ky_inv_mat()
+            end_scratch = time.time()
+            scratch_list.append(end_scratch - start_scratch)
+
+        print("Time to recompute from scratch: ", np.mean(scratch_list))
+
+    # FUNCTIONS THAT ACTUALLY TEST GPR CLASS DIRECTLY
+    # -----------------------------------------------
+
+    def test_build_Ky_inv_mat(self):
+        """
+        Test to see if build_Ky_inv_mat() method correctly computes the covariance matrix.
+        """
+        gpr = GaussianProcessRegression(x_dim=2)
+        num_train = 100
+        sigma_e = gpr.sigma_n.item()
+        sigma_f = gpr.sigma_f.item()
+        X_train = np.random.standard_normal(size=(num_train, 2))
+        y_train = np.random.standard_normal(size=(num_train,))
+        x = np.random.standard_normal(size=(2,))
+        y = np.random.standard_normal(size=(1,))
+
+        def gauss_kern(x1, x2):
+            return sigma_f ** 2 * np.exp(-1 / 2 * (x1 - x2).T @ (x1 - x2))
+
+        K = np.zeros((num_train, num_train))
+        for i in range(num_train):
+            for j in range(num_train):
+                K[i, j] = gauss_kern(X_train[i, :], X_train[j, :])
+
+        k_new = np.array([gauss_kern(x, X_train[i, :]) for i in range(X_train.shape[0])])
+        k_new = np.reshape(k_new, (num_train, 1))
+
+        A = K + (sigma_e ** 2) * np.identity(num_train)
+        A_inv = np.linalg.inv(A)
+        B = k_new
+        C = k_new.T
+        D = np.array([[sigma_e ** 2 + sigma_f ** 2]])
+        Q = np.linalg.inv(D - C @ A_inv @ B)
+
+        new_Ky_inv_top_left = A_inv + A_inv @ B @ Q @ C @ A_inv
+        new_Ky_inv_top_right = -A_inv @ B @ Q
+        new_Ky_inv_bottom_left = -Q @ C @ A_inv
+        new_Ky_inv_bottom_right = Q
+
+        new_Ky_inv_top = np.concatenate((new_Ky_inv_top_left, new_Ky_inv_top_right), axis=1)
+        new_Ky_inv_bottom = np.concatenate((new_Ky_inv_bottom_left, new_Ky_inv_bottom_right), axis=1)
+        new_Ky_inv = np.concatenate((new_Ky_inv_top, new_Ky_inv_bottom), axis=0)
+
+        # Now test to see if GPR leads to same result
+
+        for i in range(num_train):
+            gpr.append_train_data(X_train[i, :], y_train[i])
+        gpr.append_train_data(x, y)
+        gpr_Ky_inv = gpr.Ky_inv.cpu().detach().numpy()
+
+        self.assertTrue(np.max(new_Ky_inv - gpr_Ky_inv) < 1e-5)
+
     def test_kernel_matrix_gradient(self):
+        """
+        Test to see if the kernel_matrix_gradient() method of the GPR class works correctly.
+        """
         x_dim = 2
         num_train = 3
         gpr = GaussianProcessRegression(x_dim=x_dim)
@@ -400,6 +606,9 @@ class TestGaussianProcessRegression(TestCase):
         self.assertTrue(np.linalg.norm(grad_dict['sigma_n'].cpu().detach().numpy() - dKdsigma_e_finite_diff) < 1e-5)
 
     def test_marginal_likelihood_grad(self):
+        """
+        Test to see if the marginal_likelihood_grad() method of the GPR class works correctly.
+        """
         x_dim = 2
         num_train = 3
         gpr = GaussianProcessRegression(x_dim=x_dim)
@@ -485,7 +694,7 @@ class TestGaussianProcessRegression(TestCase):
 
     def test_update_hyperparams(self):
         """
-        TODO: Major issue, sigma_n becomes negative
+        TODO: Major issue, sigma_n becomes negative. This is WIP for now.
         """
         x_dim = 2
         num_train = 1000
@@ -503,166 +712,3 @@ class TestGaussianProcessRegression(TestCase):
 
         print("Done accumulating data")
         gpr.update_hyperparams()
-
-    def test_distance_matrix_kernel_computation(self):
-        # When num_train = 2000, for-loop takes 90s, torch takes 3.6s.
-        # When num_train = 5000, torch takes 3.6s still.
-        x_dim = 2
-        num_train = 1000
-        sigma_e = 1
-        sigma_f = 1.5
-        lambdas = np.array([1., 0.5])  # Has to have x_dim elements
-        X_train = np.random.standard_normal(size=(num_train, x_dim))
-
-        def gauss_kern(x1, x2):
-            Lambda_inv = np.diag(1 / lambdas)
-            return sigma_f ** 2 * np.exp(-1 / 2 * (x1 - x2).T @ Lambda_inv @ (x1 - x2))
-
-        start = time.time()
-        # K = np.zeros((num_train, num_train))
-        # for i in range(num_train):
-        #     for j in range(num_train):
-        #         K[i, j] = gauss_kern(X_train[i, :], X_train[j, :])
-        K = np.array([[gauss_kern(X_train[i, :], X_train[j, :]) for i in range(num_train)] for j in range(num_train)])
-        end = time.time()
-
-        print("For-loop method: ", end-start)
-
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        X_train = torch.tensor(X_train, device=device)
-        lambdas = torch.tensor(lambdas, device=device)
-
-        torch_start = time.time()
-        X_train_mod = X_train * torch.sqrt(1/lambdas)
-        dist_mat = torch.cdist(X_train_mod, X_train_mod, p=2)
-        torch_K = (sigma_f ** 2) * torch.exp(-1/2*torch.square(dist_mat))
-        torch_end = time.time()
-
-        print("Torch method: ", torch_end - torch_start)
-
-        self.assertTrue(np.linalg.norm(torch_K.cpu().detach().numpy() - K) < 1e-5)
-
-    def test_gradient_matrix_prod(self):
-        # For x_dim = 1,...,10, torch takes around 3.6s.
-        # For x_dim = 4, num_train = 2000, for-loop takes 26s.
-        x_dim = 4
-        num_train = 2000
-        lambdas = np.array([1., 2., 3., 4.])  # Has to have x_dim elements
-        X_train = np.random.standard_normal(size=(num_train, x_dim))
-
-        # Compute using for-loops
-        A = np.zeros(shape=(num_train, num_train, x_dim))
-        start = time.time()
-        for i in range(num_train):
-            for j in range(num_train):
-                for p in range(x_dim):
-                    A[i, j, p] = (1/(2 * lambdas[p]**2)) * (X_train[i, p] - X_train[j, p]) ** 2
-        end = time.time()
-        print("For-loop method: ", end-start)
-
-        # Compute using Torch
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        X_train = torch.tensor(X_train, device=device)
-        lambdas = torch.tensor(lambdas, device=device)
-
-        torch_start = time.time()
-        A_torch = torch.zeros(size=(num_train, num_train, x_dim), device=device)
-
-        for p in range(x_dim):
-            v = torch.reshape(X_train[:, p], (num_train, 1))
-            A_torch[:, :, p] = (1/(2 * lambdas[p]**2)) * torch.square(torch.cdist(v, v, p=2))
-
-        torch_end = time.time()
-        print("Torch method: ", torch_end-torch_start)
-
-        # Some numerical error definitely builds up, but they're roughly the same. 1e-3 = 0.001
-        self.assertTrue(np.linalg.norm(A_torch.cpu().detach().numpy() - A) < 1e-3)
-
-    def test_covariance_vector(self):
-        """
-        With num_train=5000, x_dim=4, for-loop takes 0.11s, torch takes 2.09s. Perhaps just for this one, use loop?
-        """
-        x_dim = 4
-        num_train = 5000
-        lambdas = np.array([1., 2., 3., 4.])  # Has to have x_dim elements
-        sigma_f = 1.5
-        X_train = np.random.standard_normal(size=(num_train, x_dim))
-        x_new = np.ones(x_dim)
-
-        # Compute covariance vector k_new using numpy on CPU
-        def gauss_kern(x1, x2):
-            Lambda_inv = np.diag(1 / lambdas)
-            return sigma_f ** 2 * np.exp(-1 / 2 * (x1 - x2).T @ Lambda_inv @ (x1 - x2))
-
-        start = time.time()
-        k_new = np.array([gauss_kern(X_train[i, :], x_new) for i in range(num_train)])
-        end = time.time()
-
-        print("For-loop method: ", end - start)
-
-        # Compute covariance vector k_new using Torch on GPU
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        print("device: ", device)
-        X_train = torch.tensor(X_train, device=device)
-        lambdas = torch.tensor(lambdas, device=device)
-        x_new = torch.tensor(x_new, device=device)
-
-        torch_start = time.time()
-        X_train_mod = X_train * torch.sqrt(1/lambdas)
-        x_new_mod = x_new * torch.sqrt(1/lambdas)
-        k_new_torch = (sigma_f**2) * torch.exp(-1/2 * torch.sum(torch.square(X_train_mod - x_new_mod), dim=1))
-        torch_end =time.time()
-
-        print("Torch method: ", torch_end - torch_start)
-
-        self.assertTrue(np.linalg.norm(k_new_torch.cpu().detach().numpy() - k_new) < 1e-7)
-
-    def test_build_from_scratch(self):
-        """
-        Time to add 1 observation to preexisting covariance matrix: 4.77s.
-        Time to recompute preexisting covariance matrix from scratch: 0.39s.
-        Both using Torch with num_train = 5000.
-        --------------------------------------------------------------------
-        Time to add 1 observation to preexisting covariance matrix: 0.1s.
-        Time to recompute preexisting covariance matrix from scratch: 0.003s.
-        Both using Torch with num_train = 100.
-        """
-        x_dim = 4
-        num_train = 100
-        X_train = np.random.standard_normal(size=(num_train, x_dim))
-        y_train = np.random.standard_normal(size=(num_train, 1))
-        x_new = np.array([[1., 2., 3., 4.]])
-
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        X_train_torch = torch.tensor(X_train, device=device).type(torch.float)
-        y_train_torch = torch.tensor(y_train, device=device).type(torch.float)
-        x_new_torch = torch.tensor(x_new, device=device).type(torch.float)
-        X_train_combined = torch.cat((X_train_torch, x_new_torch), dim=0)
-
-        gpr = GaussianProcessRegression(x_dim=x_dim)
-        gpr.X_train = X_train_torch
-        gpr.y_train = y_train_torch
-        gpr.num_train = num_train
-        gpr.build_Ky_inv_mat()
-
-        # Time how long it takes to add 1 datapoint
-        add1_list = []
-        for i in range(5):
-            start_add1 = time.time()
-            gpr.append_train_data(x=x_new, y=0)
-            end_add1 = time.time()
-            add1_list.append(end_add1 - start_add1)
-
-        print("Time to add 1: ", np.mean(add1_list))
-
-        # Time out long it takes to just build from scratch
-        scratch_list = []
-        for i in range(5):
-            start_scratch = time.time()
-            gpr.X_train = X_train_combined
-            gpr.num_train = num_train + 1
-            gpr.build_Ky_inv_mat()
-            end_scratch = time.time()
-            scratch_list.append(end_scratch - start_scratch)
-
-        print("Time to recompute from scratch: ", np.mean(scratch_list))

@@ -63,16 +63,6 @@ class GaussianProcessRegression(object):
             # Update A inverse matrix
             self.build_Ky_inv_mat()
 
-            # k_new = torch.tensor([self.se_kernel(x, self.X_train[i, :]) for i in range(self.num_train)],
-            #                      requires_grad=False).to(self.device)
-            # k_new = torch.reshape(k_new, (k_new.shape[0], 1))
-            # self.update_Ky_inv_mat(k_new)
-            #
-            # # Update covariance matrix K
-            # self.Kf = torch.cat((self.Kf, k_new.mT), dim=0)
-            # k_new_ext = torch.cat((k_new, torch.tensor([[self.se_kernel(x, x)]]).to(self.device)), dim=0)
-            # self.Kf = torch.cat((self.Kf, k_new_ext), dim=1)
-
     def se_kernel(self, x1, x2):
         """
         The squared exponential kernel function.
@@ -111,49 +101,6 @@ class GaussianProcessRegression(object):
         self.Kf = (self.sigma_f ** 2) * torch.exp(-1 / 2 * torch.square(dist_mat))
 
         self.Ky_inv = torch.linalg.inv(self.Kf + self.sigma_n ** 2 * torch.eye(self.num_train, device=self.device))
-
-    def update_hyperparams(self):
-        """
-        TODO: Figure out constraints and convergence condition
-        Find estimate of GP hyperparameters (listed in the constructor) by running
-        gradient ascent on marginal likelihood. Does num_iters number of iterations
-        unless gradient reaches a local min beforehand.
-        """
-        num_iters = 10
-        alpha = 0.01
-        for iter in range(num_iters):
-            print('iter: {}, lambda: {}, sigma_f: {}, sigma_n: {}'.format(iter,
-                                                                          self.lambdas.cpu().detach().numpy(),
-                                                                          self.sigma_f.cpu().detach().numpy(),
-                                                                          self.sigma_n.cpu().detach().numpy()))
-            Ky_grad_dict = self.kernel_matrix_gradient()
-            ml_grad_dict = self.marginal_likelihood_grad(Ky_grad_dict)
-
-            # Update hyperparameters
-            with torch.no_grad():
-                self.lambdas += alpha * ml_grad_dict['lambda']
-                self.sigma_f += alpha * ml_grad_dict['sigma_f']
-                self.sigma_n += alpha * ml_grad_dict['sigma_n']
-
-                # If sigmas negative set to zero
-                self.lambdas[self.lambdas < 0] = 0.
-                self.sigma_f[self.sigma_f < 0] = 0.
-                self.sigma_n[self.sigma_n < 0] = 0.
-
-            print('lambda gradient norm: ', torch.linalg.norm(ml_grad_dict['lambda']))
-            print('sigma_f gradient: ', ml_grad_dict['sigma_f'])
-            print('sigma_e gradient: ', ml_grad_dict['sigma_n'])
-            print('----------------------------------------------')
-
-            norm_sum = (torch.linalg.norm(ml_grad_dict['lambda']) +
-                        torch.linalg.norm(ml_grad_dict['sigma_f']) +
-                        torch.linalg.norm(ml_grad_dict['sigma_n']))
-            if norm_sum.item() < 1e-5:
-                # Some parts of likelihood can be really flat, so maybe should use a different condition?
-                break
-
-            # Update K_f and inverse(K_y)
-            self.build_Ky_inv_mat()
 
     def kernel_matrix_gradient(self):
         """
@@ -205,3 +152,46 @@ class GaussianProcessRegression(object):
         dml_dsigma_f = 1/2*torch.trace(B @ dK_dsigma_f)
         dml_dsigma_n = 1/2*torch.trace(B @ dK_dsigma_n)
         return {'lambda': dml_dlambda, 'sigma_f': dml_dsigma_f, 'sigma_n': dml_dsigma_n}
+
+    def update_hyperparams(self):
+        """
+        TODO: Figure out constraints and convergence condition
+        Find estimate of GP hyperparameters (listed in the constructor) by running
+        gradient ascent on marginal likelihood. Does num_iters number of iterations
+        unless gradient reaches a local min beforehand.
+        """
+        num_iters = 10
+        alpha = 0.01
+        for iter in range(num_iters):
+            print('iter: {}, lambda: {}, sigma_f: {}, sigma_n: {}'.format(iter,
+                                                                          self.lambdas.cpu().detach().numpy(),
+                                                                          self.sigma_f.cpu().detach().numpy(),
+                                                                          self.sigma_n.cpu().detach().numpy()))
+            Ky_grad_dict = self.kernel_matrix_gradient()
+            ml_grad_dict = self.marginal_likelihood_grad(Ky_grad_dict)
+
+            # Update hyperparameters
+            with torch.no_grad():
+                self.lambdas += alpha * ml_grad_dict['lambda']
+                self.sigma_f += alpha * ml_grad_dict['sigma_f']
+                self.sigma_n += alpha * ml_grad_dict['sigma_n']
+
+                # If sigmas negative set to zero
+                self.lambdas[self.lambdas < 0] = 0.
+                self.sigma_f[self.sigma_f < 0] = 0.
+                self.sigma_n[self.sigma_n < 0] = 0.
+
+            print('lambda gradient norm: ', torch.linalg.norm(ml_grad_dict['lambda']))
+            print('sigma_f gradient: ', ml_grad_dict['sigma_f'])
+            print('sigma_e gradient: ', ml_grad_dict['sigma_n'])
+            print('----------------------------------------------')
+
+            norm_sum = (torch.linalg.norm(ml_grad_dict['lambda']) +
+                        torch.linalg.norm(ml_grad_dict['sigma_f']) +
+                        torch.linalg.norm(ml_grad_dict['sigma_n']))
+            if norm_sum.item() < 1e-5:
+                # Some parts of likelihood can be really flat, so maybe should use a different condition?
+                break
+
+            # Update K_f and inverse(K_y)
+            self.build_Ky_inv_mat()
