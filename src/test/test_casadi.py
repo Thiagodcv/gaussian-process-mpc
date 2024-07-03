@@ -57,3 +57,22 @@ class TestCasadi(TestCase):
         r = S(x0=[-1, -1], lbg=0, ubg=0)
         x_opt = r['x']
         print('x_opt: ', x_opt)
+
+    def test_casadi_gpr_likelihood(self):
+        def f(x):
+            sig_f = x[0]
+            sig_e = x[1]
+            lam_1 = x[2]
+            lam_2 = x[3]
+
+            term_1 = 5/2 * (sig_f**2 + sig_e**2) - 4*(sig_f**2)*np.exp(1/lam_1 + 4/lam_2)
+            term_1 = term_1 / ((sig_f**2 + sig_e**2)**2 - (sig_f**2 * np.exp(1/lam_1 + 4/lam_2))**2)
+            term_2 = 1/2 * np.log((sig_f**2 + sig_e**2)**2 - (sig_f**2 * np.exp(1/lam_1 + 4/lam_2))**2)
+            return term_1 + term_2
+
+        x = MX.sym('x', 4)
+        nlp = {'x': x, 'f': f(x)}
+        S = nlpsol('S', 'ipopt', nlp)
+        r = S(x0=[1., 1., 1., 1.])
+        x_opt = r['x']
+        print('x_opt: ', x_opt)
