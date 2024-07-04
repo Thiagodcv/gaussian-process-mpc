@@ -32,7 +32,7 @@ class GaussianProcessRegression(object):
 
         # Optimization
         self.optimizer = torch.optim.Adam(params=[self.log_lambdas, self.log_sigma_n, self.log_sigma_f],
-                                          lr=0.001,
+                                          lr=0.005,
                                           betas=(0.9, 0.999),
                                           maximize=True)
 
@@ -178,10 +178,22 @@ class GaussianProcessRegression(object):
                 1/2 * torch.log(torch.linalg.det(self.Ky)) -
                 self.num_train/2 * np.log(2*np.pi))
 
-    def update_hyperparams(self, num_iters=10):
-        for i in range(num_iters):
+    def update_hyperparams(self, num_iters=1000):
+        for iter in range(num_iters):
             self.optimizer.zero_grad()
             ml = self.compute_marginal_likelihood()
             ml.backward()
             self.optimizer.step()
-            self.build_Ky_inv_mat()
+            self.build_Ky_inv_mat()  # Update matrices used to compute marginal likelihood under new hyperparameters
+
+            print('Iter: ', iter)
+            print('ml: ', ml.item())
+            print('lambdas: ', torch.exp(self.log_lambdas).cpu().detach().numpy())
+            print('sigma_f: ', torch.exp(self.log_sigma_f).item())
+            print('sigma_n: ', torch.exp(self.log_sigma_n).item())
+
+            print('log_lambdas.grad: ', self.log_lambdas.grad.cpu().detach().numpy())
+            print('log_sigma_f.grad: ', self.log_sigma_f.grad.item())
+            print('log_sigma_n.grad: ', self.log_sigma_n.grad.item())
+            print('----------------------------------------')
+

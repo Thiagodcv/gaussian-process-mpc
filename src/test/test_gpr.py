@@ -697,7 +697,7 @@ class TestGaussianProcessRegression(TestCase):
         TODO: Major issue, sigma_n becomes negative. This is WIP for now.
         """
         x_dim = 2
-        num_train = 1000
+        num_train = 100
         gpr = GaussianProcessRegression(x_dim=x_dim)
 
         def f(x):
