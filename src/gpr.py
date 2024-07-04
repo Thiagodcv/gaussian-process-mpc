@@ -32,7 +32,7 @@ class GaussianProcessRegression(object):
 
         # Optimization
         self.optimizer = torch.optim.Adam(params=[self.log_lambdas, self.log_sigma_n, self.log_sigma_f],
-                                          lr=0.005,
+                                          lr=0.01,  #0.005,
                                           betas=(0.9, 0.999),
                                           maximize=True)
 
@@ -168,7 +168,12 @@ class GaussianProcessRegression(object):
 
         dml_dsigma_f = 1/2*torch.trace(B @ dK_dsigma_f)
         dml_dsigma_n = 1/2*torch.trace(B @ dK_dsigma_n)
-        return {'lambda': dml_dlambda, 'sigma_f': dml_dsigma_f, 'sigma_n': dml_dsigma_n}
+
+        dml_dlog_lambda = torch.multiply(dml_dlambda, torch.exp(self.log_lambdas))
+        dml_dlog_sigma_f = dml_dsigma_f * torch.exp(self.log_sigma_f)
+        dml_dlog_sigma_n = dml_dsigma_n * torch.exp(self.log_sigma_n)
+        return {'lambda': dml_dlambda, 'sigma_f': dml_dsigma_f, 'sigma_n': dml_dsigma_n,
+                'log_lambda': dml_dlog_lambda, 'log_sigma_f': dml_dlog_sigma_f, 'log_sigma_n': dml_dlog_sigma_n}
 
     def compute_marginal_likelihood(self):
         """
@@ -183,6 +188,14 @@ class GaussianProcessRegression(object):
             self.optimizer.zero_grad()
             ml = self.compute_marginal_likelihood()
             ml.backward()
+            if torch.isnan(self.log_lambdas.grad).any().item() or torch.isnan(self.log_sigma_f.grad).any().item() or torch.isnan(self.log_sigma_n.grad).any().item():
+                print("nan!")
+                # grad_dict = self.kernel_matrix_gradient()
+                # ml_grad = self.marginal_likelihood_grad(grad_dict)
+                # self.log_lambdas.grad = ml_grad['log_lambda']
+                # self.log_sigma_f.grad = ml_grad['log_sigma_f']
+                # self.log_sigma_n.grad = ml_grad['log_sigma_n']
+
             self.optimizer.step()
             self.build_Ky_inv_mat()  # Update matrices used to compute marginal likelihood under new hyperparameters
 
@@ -196,4 +209,3 @@ class GaussianProcessRegression(object):
             print('log_sigma_f.grad: ', self.log_sigma_f.grad.item())
             print('log_sigma_n.grad: ', self.log_sigma_n.grad.item())
             print('----------------------------------------')
-
