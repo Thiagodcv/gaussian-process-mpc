@@ -36,6 +36,25 @@ class GaussianProcessRegression(object):
                                           betas=(0.9, 0.999),
                                           maximize=True)
 
+    def set_lambdas(self, lambdas):
+        """
+        Parameters:
+        ----------
+        lambdas: np.array
+        """
+        self.log_lambdas = torch.log(torch.tensor(lambdas, device=self.device)).type(torch.float64).requires_grad_()
+
+    def get_lambdas(self):
+        return torch.exp(self.log_lambdas).cpu().detach().numpy()
+
+    def set_sigma_n(self, sigma_n):
+        """
+        TODO: Finish this and sigma_f
+        Parameters:
+        ----------
+        """
+        pass
+
     def append_train_data(self, x, y):
         """
         Append (x, y) to preexisting training data.
