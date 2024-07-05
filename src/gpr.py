@@ -222,6 +222,20 @@ class GaussianProcessRegression(object):
                 1/2 * torch.log(torch.linalg.det(self.Ky)) -
                 self.num_train/2 * np.log(2*np.pi))
 
+    def compute_pred_train_covariance(self, X_pred):
+        """
+        Compute K(X*, X_train) matrix found in equations (2.22), (2.23).
+
+        Parameters:
+        ----------
+        X_pred: (p, x_dim) or (x_dim,) np.array
+
+        Returns:
+        -------
+        (p, num_train) torch.tensor
+        """
+        pass
+
     def update_hyperparams(self, num_iters=1000):
         for iter in range(num_iters):
             self.optimizer.zero_grad()

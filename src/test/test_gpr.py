@@ -784,6 +784,54 @@ class TestGaussianProcessRegression(TestCase):
 
         self.assertTrue(np.linalg.norm(gpr.Ky.cpu().detach().numpy() - Ky_test) < 1e-5)
 
+    def test_compute_pred_train_covariance(self):
+        """
+        Test compute_pred_train_covariance() to see if it works when X_pred is both a 1d array
+        and 2d array (i.e. multiple observations).
+        """
+        x_dim = 2
+        num_train = 4
+        num_pred = 2
+
+        # Hyperparameters
+        lambdas = np.array([1., 2.])
+        sigma_f = 1.2
+        sigma_n = 1.5
+
+        X_train = np.array([[1., 1.],
+                            [2., 2.],
+                            [3., 3.],
+                            [4., 4.]])
+        y_train = np.array([1., 2., 3., 4.])
+        X_pred = np.array([[1., 2.],
+                           [3., 4.]])
+
+        def gauss_kern(x1, x2):
+            Lambda_inv = np.diag(1 / lambdas)
+            return (sigma_f ** 2) * np.exp(-1 / 2 * (x1 - x2).T @ Lambda_inv @ (x1 - x2))
+
+        K_pred_test = np.array([[gauss_kern(X_train[i, :], X_pred[j, :]) for i in range(num_train)]
+                                for j in range(num_pred)])
+
+        gpr = GaussianProcessRegression(x_dim)
+        gpr.set_lambdas(lambdas)
+        gpr.set_sigma_f(sigma_f)
+        gpr.set_sigma_n(sigma_n)
+
+        gpr.append_train_data(X_train, y_train)
+        K_pred = gpr.compute_pred_train_covariance(X_pred)
+        K_pred = K_pred.cpu().detach().numpy()
+
+        self.assertTrue(np.linalg.norm(K_pred_test - K_pred) < 1e-5)
+
+        # Now try only one observation
+        x_pred1 = np.array([0.5, 0.5])
+        K_pred_test1 = np.array([gauss_kern(X_train[i, :], x_pred1)] for i in range(num_train))
+        K_pred1 = gpr.compute_pred_train_covariance(x_pred1)
+        K_pred1 = K_pred1.cpu().detach().numpy()
+
+        self.assertTrue(np.linalg.norm(K_pred_test1 - K_pred1) < 1e-5)
+
     def test_update_hyperparams(self):
         """
         TODO: Major issue, sigma_n becomes negative. This is WIP for now.
