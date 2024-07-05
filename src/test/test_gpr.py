@@ -692,6 +692,21 @@ class TestGaussianProcessRegression(TestCase):
         self.assertTrue(np.linalg.norm(dml_dsigma_f - sigma_f_finite_diff) < 1e-3)
         self.assertTrue(np.linalg.norm(dml_dsigma_n - sigma_e_finite_diff) < 1e-3)
 
+    def test_setters_and_getters(self):
+        x_dim = 2
+        lambdas = np.array([4.3, 6.5])
+        sigma_f = 5.3
+        sigma_n = 2.0
+
+        gpr = GaussianProcessRegression(x_dim)
+        gpr.set_lambdas(lambdas)
+        gpr.set_sigma_f(sigma_f)
+        gpr.set_sigma_n(sigma_n)
+
+        self.assertTrue(np.linalg.norm(lambdas - gpr.get_lambdas()) < 1e-5)
+        self.assertTrue(np.linalg.norm(sigma_f - gpr.get_sigma_f()) < 1e-5)
+        self.assertTrue(np.linalg.norm(sigma_n - gpr.get_sigma_n()) < 1e-5)
+
     def test_append_train_data(self):
         # Hyperparameters
         lambdas = np.array([1., 2.])
@@ -719,8 +734,6 @@ class TestGaussianProcessRegression(TestCase):
 
         self.assertTrue(np.linalg.norm(Ky1 - gpr.Ky.cpu().detach().norm()) < 1e-5)
 
-
-
     def test_update_hyperparams(self):
         """
         TODO: Major issue, sigma_n becomes negative. This is WIP for now.
@@ -733,7 +746,7 @@ class TestGaussianProcessRegression(TestCase):
             return x.T @ x
 
         X_train = np.random.multivariate_normal(mean=np.zeros(x_dim),
-                                                cov=10*np.identity(x_dim),
+                                                cov=1*np.identity(x_dim),
                                                 size=num_train)
         y_train = np.array([f(X_train[i, :]) for i in range(num_train)])
 

@@ -47,13 +47,27 @@ class GaussianProcessRegression(object):
     def get_lambdas(self):
         return torch.exp(self.log_lambdas).cpu().detach().numpy()
 
-    def set_sigma_n(self, sigma_n):
+    def set_sigma_f(self, sigma_f):
         """
-        TODO: Finish this and sigma_f
         Parameters:
         ----------
+        sigma_f: scalar
         """
-        pass
+        self.log_sigma_f = torch.log(torch.tensor(sigma_f, device=self.device)).type(torch.float64).requires_grad_()
+
+    def get_sigma_f(self):
+        return torch.exp(self.log_sigma_f).item()
+
+    def set_sigma_n(self, sigma_n):
+        """
+        Parameters:
+        ----------
+        sigma_n: scalar
+        """
+        self.log_sigma_n = torch.log(torch.tensor(sigma_n, device=self.device)).type(torch.float64).requires_grad_()
+
+    def get_sigma_n(self):
+        return torch.exp(self.log_sigma_n).item()
 
     def append_train_data(self, x, y):
         """
