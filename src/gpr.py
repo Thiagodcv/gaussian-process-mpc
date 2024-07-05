@@ -26,13 +26,13 @@ class GaussianProcessRegression(object):
         self.Ky_inv = None
 
         # Hyperparameters to update via backprop
-        self.log_lambdas = torch.zeros(x_dim, device=self.device).type(torch.float32).requires_grad_()
-        self.log_sigma_n = torch.tensor(0.0, device=self.device).type(torch.float32).requires_grad_()
-        self.log_sigma_f = torch.tensor(0.0, device=self.device).type(torch.float32).requires_grad_()
+        self.log_lambdas = torch.zeros(x_dim, device=self.device).type(torch.float64).requires_grad_()
+        self.log_sigma_n = torch.tensor(0.0, device=self.device).type(torch.float64).requires_grad_()
+        self.log_sigma_f = torch.tensor(0.0, device=self.device).type(torch.float64).requires_grad_()
 
         # Optimization
         self.optimizer = torch.optim.Adam(params=[self.log_lambdas, self.log_sigma_n, self.log_sigma_f],
-                                          lr=0.01,  #0.005,
+                                          lr=0.1,  # 0.005,
                                           betas=(0.9, 0.999),
                                           maximize=True)
 
@@ -48,8 +48,8 @@ class GaussianProcessRegression(object):
         x = np.reshape(x, (1, self.x_dim))
         y = np.reshape(y, (1, 1))
 
-        x = torch.tensor(x, requires_grad=False).type(torch.float32).to(self.device)
-        y = torch.tensor(y, requires_grad=False).type(torch.float32).to(self.device)
+        x = torch.tensor(x, requires_grad=False).type(torch.float64).to(self.device)
+        y = torch.tensor(y, requires_grad=False).type(torch.float64).to(self.device)
 
         if self.num_train == 0:
             self.num_train += 1
@@ -188,13 +188,16 @@ class GaussianProcessRegression(object):
             self.optimizer.zero_grad()
             ml = self.compute_marginal_likelihood()
             ml.backward()
-            if torch.isnan(self.log_lambdas.grad).any().item() or torch.isnan(self.log_sigma_f.grad).any().item() or torch.isnan(self.log_sigma_n.grad).any().item():
-                print("nan!")
-                # grad_dict = self.kernel_matrix_gradient()
-                # ml_grad = self.marginal_likelihood_grad(grad_dict)
-                # self.log_lambdas.grad = ml_grad['log_lambda']
-                # self.log_sigma_f.grad = ml_grad['log_sigma_f']
-                # self.log_sigma_n.grad = ml_grad['log_sigma_n']
+            # if torch.isnan(self.log_lambdas.grad).any().item() or torch.isnan(self.log_sigma_f.grad).any().item() or torch.isnan(self.log_sigma_n.grad).any().item():
+            #     print("nan!")
+            #     grad_dict = self.kernel_matrix_gradient()
+            #     ml_grad = self.marginal_likelihood_grad(grad_dict)
+            #     self.log_lambdas.grad = ml_grad['log_lambda']
+            #     self.log_sigma_f.grad = ml_grad['log_sigma_f']
+            #     self.log_sigma_n.grad = ml_grad['log_sigma_n']
+
+            if ml.item() > 50:
+                print("Stop!")
 
             self.optimizer.step()
             self.build_Ky_inv_mat()  # Update matrices used to compute marginal likelihood under new hyperparameters
@@ -208,4 +211,6 @@ class GaussianProcessRegression(object):
             print('log_lambdas.grad: ', self.log_lambdas.grad.cpu().detach().numpy())
             print('log_sigma_f.grad: ', self.log_sigma_f.grad.item())
             print('log_sigma_n.grad: ', self.log_sigma_n.grad.item())
+
+            print('Ky condition number: ', torch.linalg.cond(self.Ky).item())
             print('----------------------------------------')

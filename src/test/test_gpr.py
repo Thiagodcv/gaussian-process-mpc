@@ -703,7 +703,9 @@ class TestGaussianProcessRegression(TestCase):
         def f(x):
             return x.T @ x
 
-        X_train = np.random.standard_normal(size=(num_train, x_dim))
+        X_train = np.random.multivariate_normal(mean=np.zeros(x_dim),
+                                                cov=10*np.identity(x_dim),
+                                                size=num_train)
         y_train = np.array([f(X_train[i, :]) for i in range(num_train)])
 
         for i in range(num_train):
