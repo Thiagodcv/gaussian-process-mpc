@@ -258,13 +258,59 @@ class GaussianProcessRegression(object):
             X_train_mod = self.X_train * torch.sqrt(1 / lambdas)
             X_pred_mod = X_pred * torch.sqrt(1 / lambdas)
             dist_mat = torch.cdist(X_pred_mod, X_train_mod, p=2)
-            k_vec = (sigma_f ** 2) * torch.exp(-1 / 2 * torch.square(dist_mat))
+            K_pred_train = (sigma_f ** 2) * torch.exp(-1 / 2 * torch.square(dist_mat))
+
         # If just one test point
         else:
-            k_vec = torch.tensor([self.se_kernel(X_pred, self.X_train[i, :]) for i in range(self.num_train)],
-                                 device=self.device).type(torch.float64)  # Might be faster to do this fully in Python
+            # Might be faster to do this fully in Python
+            K_pred_train = torch.tensor([self.se_kernel(X_pred, self.X_train[i, :]) for i in range(self.num_train)],
+                                        device=self.device).type(torch.float64)
+        return K_pred_train
 
-        return k_vec
+    def predict_mean(self, X_pred):
+        """
+        TODO: Test this implementation
+        Implements equation 2.23.
+
+        Parameters:
+        ----------
+        X_pred: (p, x_dim) or (x_dim,) np.array
+
+        Returns:
+        -------
+        np.array
+        """
+        K_pred_train = self.compute_pred_train_covariance(X_pred)
+        f_pred = K_pred_train @ self.Ky_inv @ self.y_train
+        return f_pred.cpu().detach().numpy()
+
+    def predict_covar(self, X_pred):
+        """
+        TODO: Test this implementation
+        Implements equation 2.24.
+
+        Parameters:
+        ----------
+        X_pred: (p, x_dim) or (x_dim,) np.array
+
+        Returns:
+        -------
+        np.array
+        """
+        K_pred_train = self.compute_pred_train_covariance(X_pred)
+
+        # Convert to Torch
+        lambdas = torch.exp(self.log_lambdas)
+        sigma_f = torch.exp(self.log_sigma_f)
+        X_pred = torch.tensor(X_pred, device=self.device).type(torch.float64)
+
+        # Compute covariance matrix between predictions
+        X_pred_mod = X_pred * torch.sqrt(1 / lambdas)
+        dist_mat = torch.cdist(X_pred_mod,  X_pred_mod, p=2)
+        K_pred_pred = (sigma_f ** 2) * torch.exp(-1 / 2 * torch.square(dist_mat))
+
+        cov = K_pred_pred - K_pred_train @ self.Ky_inv @ K_pred_train.mT
+        return cov.cpu().detach().numpy()
 
     def update_hyperparams(self, num_iters=1000):
         for iter in range(num_iters):
