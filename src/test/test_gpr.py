@@ -708,6 +708,9 @@ class TestGaussianProcessRegression(TestCase):
         self.assertTrue(np.linalg.norm(sigma_n - gpr.get_sigma_n()) < 1e-5)
 
     def test_append_train_data(self):
+        """
+        Test gpr.append_train_data() method were we insert both one observation and multiple observations.
+        """
         # Hyperparameters
         lambdas = np.array([1., 2.])
         sigma_f = 1.2
@@ -722,17 +725,64 @@ class TestGaussianProcessRegression(TestCase):
         y1 = np.array([1.])
         y234 = np.array([2., 3., 4.])
 
+        X_train = np.concatenate((x1[None, :], x234), axis=0)
+        y_train = np.concatenate((y1, y234), axis=0)
+
         def gauss_kern(x1, x2):
             Lambda_inv = np.diag(1 / lambdas)
             return (sigma_f ** 2) * np.exp(-1 / 2 * (x1 - x2).T @ Lambda_inv @ (x1 - x2))
 
         gpr = GaussianProcessRegression(x_dim=x_dim)
+        gpr.set_lambdas(lambdas)
+        gpr.set_sigma_f(sigma_f)
+        gpr.set_sigma_n(sigma_n)
 
         # Test 1x1 covariance matrix
         gpr.append_train_data(x1, y1)
         Ky1 = gauss_kern(x1, x1) + sigma_n**2
 
-        self.assertTrue(np.linalg.norm(Ky1 - gpr.Ky.cpu().detach().norm()) < 1e-5)
+        self.assertTrue(np.linalg.norm(Ky1 - gpr.Ky.cpu().detach().numpy()) < 1e-5)
+        self.assertTrue(gpr.num_train == 1)
+
+        gpr.append_train_data(x234, y234)
+        Ky1234 = np.array([[gauss_kern(X_train[i, :], X_train[j, :]) for i in range(4)] for j in range(4)])
+        Ky1234 += sigma_n**2 * np.identity(4)
+        self.assertTrue(np.linalg.norm(Ky1234 - gpr.Ky.cpu().detach().numpy()) < 1e-5)
+        self.assertTrue(gpr.num_train == 4)
+
+    def test_append_train_data_mat_first(self):
+        """
+        Test gpr.append_train_data() where the first data fed into the gpr class is a bundle of more
+        than one observations.
+        """
+        x_dim = 2
+
+        # Hyperparameters
+        lambdas = np.array([1., 2.])
+        sigma_f = 1.2
+        sigma_n = 1.5
+
+        gpr = GaussianProcessRegression(x_dim=x_dim)
+        gpr.set_lambdas(lambdas)
+        gpr.set_sigma_f(sigma_f)
+        gpr.set_sigma_n(sigma_n)
+
+        X_train = np.array([[1., 1.],
+                            [2., 2.],
+                            [3., 3.],
+                            [4., 4.]])
+        y_train = np.array([1., 2., 3., 4.])
+
+        gpr.append_train_data(X_train, y_train)
+
+        def gauss_kern(x1, x2):
+            Lambda_inv = np.diag(1 / lambdas)
+            return (sigma_f ** 2) * np.exp(-1 / 2 * (x1 - x2).T @ Lambda_inv @ (x1 - x2))
+
+        Ky_test = np.array([[gauss_kern(X_train[i, :], X_train[j, :]) for i in range(4)] for j in range(4)])
+        Ky_test += sigma_n ** 2 * np.identity(4)
+
+        self.assertTrue(np.linalg.norm(gpr.Ky.cpu().detach().numpy() - Ky_test) < 1e-5)
 
     def test_update_hyperparams(self):
         """

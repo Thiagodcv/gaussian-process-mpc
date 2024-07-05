@@ -38,6 +38,8 @@ class GaussianProcessRegression(object):
 
     def set_lambdas(self, lambdas):
         """
+        If training data already loaded, need to run self.build_Ky_inv_mat() to update matrices.
+
         Parameters:
         ----------
         lambdas: np.array
@@ -49,6 +51,8 @@ class GaussianProcessRegression(object):
 
     def set_sigma_f(self, sigma_f):
         """
+        If training data already loaded, need to run self.build_Ky_inv_mat() to update matrices.
+
         Parameters:
         ----------
         sigma_f: scalar
@@ -60,6 +64,8 @@ class GaussianProcessRegression(object):
 
     def set_sigma_n(self, sigma_n):
         """
+        If training data already loaded, need to run self.build_Ky_inv_mat() to update matrices.
+
         Parameters:
         ----------
         sigma_n: scalar
@@ -71,6 +77,7 @@ class GaussianProcessRegression(object):
 
     def append_train_data(self, x, y):
         """
+        TODO: Update the method to take more than one observation at a time.
         Append (x, y) to preexisting training data.
 
         Parameters
@@ -78,26 +85,25 @@ class GaussianProcessRegression(object):
         x: (x_dim, ) numpy array
         y: scalar or numpy array
         """
-        x = np.reshape(x, (1, self.x_dim))
-        y = np.reshape(y, (1, 1))
+        num_obs = len(y)
+        if num_obs == 1:
+            x = np.reshape(x, (1, self.x_dim))
+        y = y[:, None]
 
         x = torch.tensor(x, requires_grad=False).type(torch.float64).to(self.device)
         y = torch.tensor(y, requires_grad=False).type(torch.float64).to(self.device)
 
         if self.num_train == 0:
-            self.num_train += 1
+            self.num_train += num_obs
             self.X_train = x
             self.y_train = y
-            self.Kf = torch.tensor([[self.se_kernel(x, x)]], requires_grad=False).to(self.device)  # requires_grad?
-            self.Ky = self.Kf + torch.exp(self.log_sigma_n) ** 2
-            self.Ky_inv = 1 / self.Ky
         else:
-            self.num_train += 1
+            self.num_train += num_obs
             self.X_train = torch.cat((self.X_train, x), dim=0)
             self.y_train = torch.cat((self.y_train, y), dim=0)
 
-            # Update A inverse matrix
-            self.build_Ky_inv_mat()
+        # Update Kf, Ky, and inverse(Ky) matrices
+        self.build_Ky_inv_mat()
 
     def se_kernel(self, x1, x2):
         """
