@@ -826,7 +826,7 @@ class TestGaussianProcessRegression(TestCase):
 
         # Now try only one observation
         x_pred1 = np.array([0.5, 0.5])
-        K_pred_test1 = np.array([gauss_kern(X_train[i, :], x_pred1)] for i in range(num_train))
+        K_pred_test1 = np.array([gauss_kern(X_train[i, :], x_pred1) for i in range(num_train)])
         K_pred1 = gpr.compute_pred_train_covariance(x_pred1)
         K_pred1 = K_pred1.cpu().detach().numpy()
 

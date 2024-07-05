@@ -107,7 +107,7 @@ class GaussianProcessRegression(object):
 
     def se_kernel(self, x1, x2):
         """
-        The squared exponential kernel function.
+        The squared exponential kernel function implemented for Torch.
         """
         lambdas = torch.exp(self.log_lambdas)
         sigma_f = torch.exp(self.log_sigma_f)
@@ -117,6 +117,19 @@ class GaussianProcessRegression(object):
         inv_lambda = torch.diag(1 / lambdas)
 
         return (sigma_f**2) * torch.exp(-1/2 * (x1 - x2) @ inv_lambda @ (x1 - x2))
+
+    def se_kernel_np(self, x1, x2):
+        """
+        The squared exponential kernel function implemented for Numpy.
+        """
+        lambdas = torch.exp(self.log_lambdas).cpu().detach().numpy()  # This line might slow things down.
+        sigma_f = torch.exp(self.log_sigma_f).item()
+
+        x1 = np.squeeze(x1)
+        x2 = np.squeeze(x2)
+        inv_lambda = np.diag(1 / lambdas)
+
+        return (sigma_f**2) * torch.exp(-1/2 * (x1 - x2).T @ inv_lambda @ (x1 - x2))
 
     def update_Ky_inv_mat(self, k_new):
         """
@@ -232,9 +245,26 @@ class GaussianProcessRegression(object):
 
         Returns:
         -------
-        (p, num_train) torch.tensor
+        (p, num_train) torch.tensor if p>1 observations,
+        (num_train,) torch.tensor if one observation.
         """
-        pass
+        X_pred = torch.tensor(X_pred, device=self.device).type(torch.float64)
+
+        # If predicting on multiple test points at once
+        if len(X_pred.shape) == 2:
+            lambdas = torch.exp(self.log_lambdas)
+            sigma_f = torch.exp(self.log_sigma_f)
+
+            X_train_mod = self.X_train * torch.sqrt(1 / lambdas)
+            X_pred_mod = X_pred * torch.sqrt(1 / lambdas)
+            dist_mat = torch.cdist(X_pred_mod, X_train_mod, p=2)
+            k_vec = (sigma_f ** 2) * torch.exp(-1 / 2 * torch.square(dist_mat))
+        # If just one test point
+        else:
+            k_vec = torch.tensor([self.se_kernel(X_pred, self.X_train[i, :]) for i in range(self.num_train)],
+                                 device=self.device).type(torch.float64)  # Might be faster to do this fully in Python
+
+        return k_vec
 
     def update_hyperparams(self, num_iters=1000):
         for iter in range(num_iters):
