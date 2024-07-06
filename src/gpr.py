@@ -267,50 +267,50 @@ class GaussianProcessRegression(object):
                                         device=self.device).type(torch.float64)
         return K_pred_train
 
-    def predict_mean(self, X_pred):
+    def predict_latent_vars(self, X_pred, covar=False, targets=False):
         """
-        TODO: Test this implementation
-        Implements equation 2.23.
+        TODO: Test this implementation. Add option to predict y's instead (larger cov).
+        Implements equation 2.23 & 2.24.
 
         Parameters:
         ----------
         X_pred: (p, x_dim) or (x_dim,) np.array
+        covar: boolean
+            If set to True, method returns covariance of predictions (whether the method is used
+            to predict latent variables f or targets y).
+        targets: boolean
+            If set to True, method returns covariance of targets y instead of latent variables f.
+            If covar=False, changes nothing.
 
         Returns:
         -------
-        np.array
+        np.array and None if covar=False, else two np.array
         """
         K_pred_train = self.compute_pred_train_covariance(X_pred)
         f_pred = K_pred_train @ self.Ky_inv @ self.y_train
-        return f_pred.cpu().detach().numpy()
 
-    def predict_covar(self, X_pred):
-        """
-        TODO: Test this implementation
-        Implements equation 2.24.
+        if not covar:
+            return f_pred.cpu().detach().numpy(), None
+        else:
+            # Convert to Torch
+            lambdas = torch.exp(self.log_lambdas)
+            sigma_f = torch.exp(self.log_sigma_f)
+            sigma_n = torch.exp(self.log_sigma_n)
+            X_pred = torch.tensor(X_pred, device=self.device).type(torch.float64)
 
-        Parameters:
-        ----------
-        X_pred: (p, x_dim) or (x_dim,) np.array
+            # Compute covariance matrix between predictions
+            X_pred_mod = X_pred * torch.sqrt(1 / lambdas)
+            dist_mat = torch.cdist(X_pred_mod, X_pred_mod, p=2)
+            K_pred_pred = (sigma_f ** 2) * torch.exp(-1 / 2 * torch.square(dist_mat))
 
-        Returns:
-        -------
-        np.array
-        """
-        K_pred_train = self.compute_pred_train_covariance(X_pred)
+            cov = K_pred_pred - K_pred_train @ self.Ky_inv @ K_pred_train.mT
 
-        # Convert to Torch
-        lambdas = torch.exp(self.log_lambdas)
-        sigma_f = torch.exp(self.log_sigma_f)
-        X_pred = torch.tensor(X_pred, device=self.device).type(torch.float64)
+            # If predicting targets and not latent variables
+            if targets:
+                p = X_pred.shape[0] if len(X_pred.shape) == 2 else 1
+                cov += (sigma_n ** 2) * torch.eye(p, device=self.device).type(torch.float64)
 
-        # Compute covariance matrix between predictions
-        X_pred_mod = X_pred * torch.sqrt(1 / lambdas)
-        dist_mat = torch.cdist(X_pred_mod,  X_pred_mod, p=2)
-        K_pred_pred = (sigma_f ** 2) * torch.exp(-1 / 2 * torch.square(dist_mat))
-
-        cov = K_pred_pred - K_pred_train @ self.Ky_inv @ K_pred_train.mT
-        return cov.cpu().detach().numpy()
+            return f_pred.cpu().detach().numpy(), cov.cpu().detach().numpy()
 
     def update_hyperparams(self, num_iters=1000):
         for iter in range(num_iters):

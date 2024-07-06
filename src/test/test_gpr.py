@@ -832,6 +832,45 @@ class TestGaussianProcessRegression(TestCase):
 
         self.assertTrue(np.linalg.norm(K_pred_test1 - K_pred1) < 1e-5)
 
+    def test_predict_latent_vars(self):
+        """
+        Test the predict_latent_vars() method.
+        """
+        x_dim = 2
+        num_train = 4
+        num_pred = 2
+
+        # Hyperparameters
+        lambdas = np.array([1., 2.])
+        sigma_f = 1.2
+        sigma_n = 2
+
+        X_train = np.array([[1., 1.],
+                            [2., 2.],
+                            [3., 3.],
+                            [4., 4.]])
+        y_train = np.array([1., 2., 3., 4.])
+        X_pred = np.array([[1., 2.],
+                           [3., 4.]])
+
+        gpr = GaussianProcessRegression(x_dim)
+        gpr.set_lambdas(lambdas)
+        gpr.set_sigma_f(sigma_f)
+        gpr.set_sigma_n(sigma_n)
+        gpr.append_train_data(X_train, y_train)
+
+        f_mean1, _ = gpr.predict_latent_vars(X_pred)
+        print(f_mean1)
+
+        f_mean2, f_cov2 = gpr.predict_latent_vars(X_pred, covar=True)
+        print(f_mean2)
+        print(f_cov2)
+
+        f_mean3, f_cov3 = gpr.predict_latent_vars(X_pred, covar=True, targets=True)
+        print(f_mean3)
+        print(f_cov3)
+        self.assertTrue(np.linalg.norm(f_cov3 - (f_cov2 + sigma_n**2 * np.identity(2))) < 1e-5)
+
     def test_update_hyperparams(self):
         """
         TODO: Major issue, sigma_n becomes negative. This is WIP for now.
