@@ -871,6 +871,22 @@ class TestGaussianProcessRegression(TestCase):
         print(f_cov3)
         self.assertTrue(np.linalg.norm(f_cov3 - (f_cov2 + sigma_n**2 * np.identity(2))) < 1e-5)
 
+    def test_1d_gpr(self):
+        gpr = GaussianProcessRegression(x_dim=1)
+
+        def f(x): return x**2
+        X_train = np.array([i for i in range(-5, 5 + 1)])
+        X_train = X_train[:, None]
+        y_train = np.array([f(X_train[i, :].item()) for i in range(X_train.shape[0])]) + np.random.normal(loc=0, scale=1.0, size=len(X_train))
+
+        gpr.append_train_data(X_train, y_train)
+
+        X_pred = np.linspace(-5, 5, 50)
+        X_pred = X_pred[:, None]
+        mean, covar = gpr.predict_latent_vars(X_pred, covar=True)
+        print(mean)
+        print(covar)
+
     def test_update_hyperparams(self):
         """
         TODO: Major issue, sigma_n becomes negative. This is WIP for now.

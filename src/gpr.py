@@ -77,7 +77,6 @@ class GaussianProcessRegression(object):
 
     def append_train_data(self, x, y):
         """
-        TODO: Update the method to take more than one observation at a time.
         Append (x, y) to preexisting training data.
 
         Parameters
@@ -269,7 +268,6 @@ class GaussianProcessRegression(object):
 
     def predict_latent_vars(self, X_pred, covar=False, targets=False):
         """
-        TODO: Test this implementation. Add option to predict y's instead (larger cov).
         Implements equation 2.23 & 2.24.
 
         Parameters:
