@@ -883,13 +883,13 @@ class TestGaussianProcessRegression(TestCase):
 
         gpr.append_train_data(X_train, y_train)
 
-        X_pred = np.linspace(-6, 6, 50)
+        X_pred = np.linspace(-6, 6, 200)
         X_pred = X_pred[:, None]
 
         # Plot data
-        lambdas = [i for i in range(1, 10 + 1)]
-        sigma_f = 0.5
-        sigma_n = 0.5
+        lambdas = [22.2]  # [i/10 for i in range(1, 10 + 1)]
+        sigma_f = 1
+        sigma_n = 3
         gpr.set_sigma_f(sigma_f)
         gpr.set_sigma_n(sigma_n)
 
@@ -908,23 +908,15 @@ class TestGaussianProcessRegression(TestCase):
 
     def test_update_hyperparams(self):
         """
-        TODO: Major issue, sigma_n becomes negative. This is WIP for now.
+        Test update_hyperparams().
         """
-        x_dim = 2
-        num_train = 100
-        gpr = GaussianProcessRegression(x_dim=x_dim)
+        gpr = GaussianProcessRegression(x_dim=1)
 
-        def f(x):
-            return x.T @ x
+        def f(x): return x ** 2
 
-        X_train = np.random.multivariate_normal(mean=np.zeros(x_dim),
-                                                cov=1*np.identity(x_dim),
-                                                size=num_train)
-        y_train = np.array([f(X_train[i, :]) for i in range(num_train)])
-
-        for i in range(num_train):
-            print(i)
-            gpr.append_train_data(X_train[i, :], y_train[i])
-
-        print("Done accumulating data")
+        X_train = np.array([i for i in range(-5, 5 + 1)])
+        X_train = X_train[:, None]
+        y_train = (np.array([f(X_train[i, :].item()) for i in range(X_train.shape[0])]) +
+                   np.random.normal(loc=0, scale=1.0, size=len(X_train)))
+        gpr.append_train_data(X_train, y_train)
         gpr.update_hyperparams()
