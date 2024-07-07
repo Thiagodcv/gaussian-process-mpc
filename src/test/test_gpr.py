@@ -4,6 +4,8 @@ import numpy as np
 from src.gpr import GaussianProcessRegression
 import torch
 import scipy.linalg.blas as blas
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 
 
 class TestGaussianProcessRegression(TestCase):
@@ -881,11 +883,28 @@ class TestGaussianProcessRegression(TestCase):
 
         gpr.append_train_data(X_train, y_train)
 
-        X_pred = np.linspace(-5, 5, 50)
+        X_pred = np.linspace(-6, 6, 50)
         X_pred = X_pred[:, None]
-        mean, covar = gpr.predict_latent_vars(X_pred, covar=True)
-        print(mean)
-        print(covar)
+
+        # Plot data
+        lambdas = [i for i in range(1, 10 + 1)]
+        sigma_f = 0.5
+        sigma_n = 0.5
+        gpr.set_sigma_f(sigma_f)
+        gpr.set_sigma_n(sigma_n)
+
+        for lambd in lambdas:
+            gpr.set_lambdas(np.array(lambd))
+            gpr.build_Ky_inv_mat()
+
+            mean, covar = gpr.predict_latent_vars(X_pred, covar=True)
+            ml = gpr.compute_marginal_likelihood().item()
+
+            plt.plot(X_pred.squeeze(), mean)
+            plt.scatter(X_train.squeeze(), y_train, color='red')
+            plt.title('ML: {:.2f}, lambda: {:.2f}, sigma_f: {:.2f}, sigma_n: {:.2f}'.
+                      format(ml, lambd, sigma_f, sigma_n))
+            plt.show()
 
     def test_update_hyperparams(self):
         """
