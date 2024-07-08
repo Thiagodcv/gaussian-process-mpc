@@ -117,19 +117,6 @@ class GaussianProcessRegression(object):
 
         return (sigma_f**2) * torch.exp(-1/2 * (x1 - x2) @ inv_lambda @ (x1 - x2))
 
-    def se_kernel_np(self, x1, x2):
-        """
-        The squared exponential kernel function implemented for Numpy.
-        """
-        lambdas = torch.exp(self.log_lambdas).cpu().detach().numpy()  # This line might slow things down.
-        sigma_f = torch.exp(self.log_sigma_f).item()
-
-        x1 = np.squeeze(x1)
-        x2 = np.squeeze(x2)
-        inv_lambda = np.diag(1 / lambdas)
-
-        return (sigma_f**2) * torch.exp(-1/2 * (x1 - x2).T @ inv_lambda @ (x1 - x2))
-
     def update_Ky_inv_mat(self, k_new):
         """
         TODO: Simply rebuilding covariance matrix is faster. Don't use this.
@@ -315,16 +302,13 @@ class GaussianProcessRegression(object):
             self.optimizer.zero_grad()
             ml = self.compute_marginal_likelihood()
             ml.backward()
+
             # if torch.isnan(self.log_lambdas.grad).any().item() or torch.isnan(self.log_sigma_f.grad).any().item() or torch.isnan(self.log_sigma_n.grad).any().item():
-            #     print("nan!")
             #     grad_dict = self.kernel_matrix_gradient()
             #     ml_grad = self.marginal_likelihood_grad(grad_dict)
             #     self.log_lambdas.grad = ml_grad['log_lambda']
             #     self.log_sigma_f.grad = ml_grad['log_sigma_f']
             #     self.log_sigma_n.grad = ml_grad['log_sigma_n']
-
-            if ml.item() > 50:
-                print("Stop!")
 
             self.optimizer.step()
             self.build_Ky_inv_mat()  # Update matrices used to compute marginal likelihood under new hyperparameters
@@ -335,9 +319,18 @@ class GaussianProcessRegression(object):
             print('sigma_f: ', torch.exp(self.log_sigma_f).item())
             print('sigma_n: ', torch.exp(self.log_sigma_n).item())
 
-            print('log_lambdas.grad: ', self.log_lambdas.grad.cpu().detach().numpy())
-            print('log_sigma_f.grad: ', self.log_sigma_f.grad.item())
-            print('log_sigma_n.grad: ', self.log_sigma_n.grad.item())
+            log_lambdas_grad = self.log_lambdas.grad.cpu().detach().numpy()
+            log_sigma_f_grad = self.log_sigma_f.grad.item()
+            log_sigma_n_grad = self.log_sigma_n.grad.item()
+
+            print('log_lambdas.grad: ', log_lambdas_grad)
+            print('log_sigma_f.grad: ', log_sigma_f_grad)
+            print('log_sigma_n.grad: ', log_sigma_n_grad)
 
             print('Ky condition number: ', torch.linalg.cond(self.Ky).item())
             print('----------------------------------------')
+
+            if ((np.abs(log_lambdas_grad) < 1e-5).all() and
+                    np.abs(log_sigma_f_grad) < 1e-5 and
+                    np.abs(log_sigma_n_grad) < 1e-5):
+                break
