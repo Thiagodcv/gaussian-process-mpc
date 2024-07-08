@@ -82,7 +82,7 @@ class GaussianProcessRegression(object):
         Parameters
         ----------
         x: (x_dim, ) numpy array
-        y: scalar or numpy array
+        y: (num_obs, ) numpy array (even if num_obs=1)
         """
         num_obs = len(y)
         if num_obs == 1:
@@ -178,7 +178,9 @@ class GaussianProcessRegression(object):
         dK_dsigma_f = 2 / sigma_f * self.Kf
         dK_dsigma_n = 2 * sigma_n * torch.eye(self.num_train, device=self.device)
 
-        return {'lambda': dK_dlambda, 'sigma_f': dK_dsigma_f, 'sigma_n': dK_dsigma_n}
+        return {'lambda': dK_dlambda.type(torch.float64),
+                'sigma_f': dK_dsigma_f.type(torch.float64),
+                'sigma_n': dK_dsigma_n.type(torch.float64)}
 
     def marginal_likelihood_grad(self, gradient_dict):
         """

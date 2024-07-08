@@ -530,8 +530,7 @@ class TestGaussianProcessRegression(TestCase):
 
         # Now test to see if GPR leads to same result
 
-        for i in range(num_train):
-            gpr.append_train_data(X_train[i, :], y_train[i])
+        gpr.append_train_data(X_train, y_train)
         gpr.append_train_data(x, y)
         gpr_Ky_inv = gpr.Ky_inv.cpu().detach().numpy()
 
@@ -547,8 +546,7 @@ class TestGaussianProcessRegression(TestCase):
         X_train = np.random.standard_normal(size=(num_train, x_dim))
         y_train = np.random.standard_normal(size=(num_train,))
 
-        for i in range(num_train):
-            gpr.append_train_data(X_train[i, :], y_train[i])
+        gpr.append_train_data(X_train, y_train)
 
         # Test build_A_inv_mat calculation of K using Torch
         K1 = gpr.Kf.cpu().detach().numpy()
@@ -617,8 +615,7 @@ class TestGaussianProcessRegression(TestCase):
         X_train = np.random.standard_normal(size=(num_train, x_dim))
         y_train = np.random.standard_normal(size=(num_train,))
 
-        for i in range(num_train):
-            gpr.append_train_data(X_train[i, :], y_train[i])
+        gpr.append_train_data(X_train, y_train)
 
         gpr.build_Ky_inv_mat()  # Test build_A_inv_mat()
         grad_dict = gpr.kernel_matrix_gradient()
