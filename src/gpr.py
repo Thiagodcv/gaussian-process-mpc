@@ -21,18 +21,59 @@ class GaussianProcessRegression(object):
         # Covariance matrix
         self.Kf = None
 
-        # Inverse of covariance matrix plus variance of noise "the A-inverse matrix"
+        # Covariance matrix plus variance of noise, and its inverse
+        self.Ky = None
         self.Ky_inv = None
 
         # Hyperparameters to update via backprop
-        self.lambdas = torch.ones(x_dim, device=self.device).type(torch.float32).requires_grad_()
-        self.sigma_n = torch.tensor(0.75, device=self.device).type(torch.float32).requires_grad_()
-        self.sigma_f = torch.tensor(0.75, device=self.device).type(torch.float32).requires_grad_()
+        self.log_lambdas = torch.zeros(x_dim, device=self.device).type(torch.float64).requires_grad_()
+        self.log_sigma_n = torch.tensor(0.0, device=self.device).type(torch.float64).requires_grad_()
+        self.log_sigma_f = torch.tensor(0.0, device=self.device).type(torch.float64).requires_grad_()
 
         # Optimization
-        self.optimizer = torch.optim.LBFGS(params=[self.lambdas, self.sigma_n, self.sigma_f],
-                                           lr=1e-1,
-                                           max_iter=20)
+        self.optimizer = torch.optim.Adam(params=[self.log_lambdas, self.log_sigma_n, self.log_sigma_f],
+                                          lr=0.1,  # 0.005,
+                                          betas=(0.9, 0.999),
+                                          maximize=True)
+
+    def set_lambdas(self, lambdas):
+        """
+        If training data already loaded, need to run self.build_Ky_inv_mat() to update matrices.
+
+        Parameters:
+        ----------
+        lambdas: np.array
+        """
+        self.log_lambdas = torch.log(torch.tensor(lambdas, device=self.device)).type(torch.float64).requires_grad_()
+
+    def get_lambdas(self):
+        return torch.exp(self.log_lambdas).cpu().detach().numpy()
+
+    def set_sigma_f(self, sigma_f):
+        """
+        If training data already loaded, need to run self.build_Ky_inv_mat() to update matrices.
+
+        Parameters:
+        ----------
+        sigma_f: scalar
+        """
+        self.log_sigma_f = torch.log(torch.tensor(sigma_f, device=self.device)).type(torch.float64).requires_grad_()
+
+    def get_sigma_f(self):
+        return torch.exp(self.log_sigma_f).item()
+
+    def set_sigma_n(self, sigma_n):
+        """
+        If training data already loaded, need to run self.build_Ky_inv_mat() to update matrices.
+
+        Parameters:
+        ----------
+        sigma_n: scalar
+        """
+        self.log_sigma_n = torch.log(torch.tensor(sigma_n, device=self.device)).type(torch.float64).requires_grad_()
+
+    def get_sigma_n(self):
+        return torch.exp(self.log_sigma_n).item()
 
     def append_train_data(self, x, y):
         """
@@ -41,46 +82,57 @@ class GaussianProcessRegression(object):
         Parameters
         ----------
         x: (x_dim, ) numpy array
-        y: scalar or numpy array
+        y: (num_obs, ) numpy array or scalar
         """
-        x = np.reshape(x, (1, self.x_dim))
-        y = np.reshape(y, (1, 1))
+        if not np.isscalar(y):
+            num_obs = len(y)
+            y = y[:, None]
+        else:
+            num_obs = 1
+            y = np.array([y])[:, None]
 
-        x = torch.tensor(x, requires_grad=False).type(torch.float32).to(self.device)
-        y = torch.tensor(y, requires_grad=False).type(torch.float32).to(self.device)
+        if num_obs == 1:
+            x = np.reshape(x, (1, self.x_dim))
+
+        x = torch.tensor(x, requires_grad=False).type(torch.float64).to(self.device)
+        y = torch.tensor(y, requires_grad=False).type(torch.float64).to(self.device)
 
         if self.num_train == 0:
-            self.num_train += 1
+            self.num_train += num_obs
             self.X_train = x
             self.y_train = y
-            self.Kf = torch.tensor([[self.se_kernel(x, x)]], requires_grad=False).to(self.device)  # requires_grad?
-            self.Ky_inv = 1 / (self.Kf + self.sigma_n ** 2)
         else:
-            self.num_train += 1
+            self.num_train += num_obs
             self.X_train = torch.cat((self.X_train, x), dim=0)
             self.y_train = torch.cat((self.y_train, y), dim=0)
 
-            # Update A inverse matrix
-            self.build_Ky_inv_mat()
+        # Update Kf, Ky, and inverse(Ky) matrices
+        self.build_Ky_inv_mat()
 
     def se_kernel(self, x1, x2):
         """
-        The squared exponential kernel function.
+        The squared exponential kernel function implemented for Torch.
         """
+        lambdas = torch.exp(self.log_lambdas)
+        sigma_f = torch.exp(self.log_sigma_f)
+
         x1 = torch.squeeze(x1)
         x2 = torch.squeeze(x2)
-        inv_lambda = torch.diag(1 / self.lambdas)
+        inv_lambda = torch.diag(1 / lambdas)
 
-        return (self.sigma_f**2) * torch.exp(-1/2 * (x1 - x2) @ inv_lambda @ (x1 - x2))
+        return (sigma_f**2) * torch.exp(-1/2 * (x1 - x2) @ inv_lambda @ (x1 - x2))
 
     def update_Ky_inv_mat(self, k_new):
         """
         TODO: Simply rebuilding covariance matrix is faster. Don't use this.
         Update A_inv_mat to include a new datapoint in X_train.
         """
+        sigma_f = torch.exp(self.log_sigma_f)
+        sigma_n = torch.exp(self.log_sigma_n)
+
         B = k_new
         C = k_new.mT
-        D = torch.reshape(self.sigma_n ** 2 + self.sigma_f ** 2, (1, 1))
+        D = torch.reshape(sigma_n ** 2 + sigma_f ** 2, (1, 1))
         Q = 1./(D - C @ self.Ky_inv @ B)  # Just inverting a scalar
 
         new_Ky_inv_top_left = self.Ky_inv + self.Ky_inv @ B @ Q @ C @ self.Ky_inv
@@ -94,13 +146,17 @@ class GaussianProcessRegression(object):
 
     def build_Ky_inv_mat(self):
         """
-        Builds A_inv from scratch using training data.
+        Builds Kf, Ky, and Ky_inv from scratch using training data.
         """
-        X_train_mod = self.X_train * torch.sqrt(1 / self.lambdas)
-        dist_mat = torch.cdist(X_train_mod, X_train_mod, p=2)
-        self.Kf = (self.sigma_f ** 2) * torch.exp(-1 / 2 * torch.square(dist_mat))
+        lambdas = torch.exp(self.log_lambdas)
+        sigma_f = torch.exp(self.log_sigma_f)
+        sigma_n = torch.exp(self.log_sigma_n)
 
-        self.Ky_inv = torch.linalg.inv(self.Kf + self.sigma_n ** 2 * torch.eye(self.num_train, device=self.device))
+        X_train_mod = self.X_train * torch.sqrt(1 / lambdas)
+        dist_mat = torch.cdist(X_train_mod, X_train_mod, p=2)
+        self.Kf = (sigma_f ** 2) * torch.exp(-1 / 2 * torch.square(dist_mat))
+        self.Ky = self.Kf + sigma_n ** 2 * torch.eye(self.num_train, device=self.device)
+        self.Ky_inv = torch.linalg.inv(self.Ky)
 
     def kernel_matrix_gradient(self):
         """
@@ -111,19 +167,25 @@ class GaussianProcessRegression(object):
         -------
         dict containing gradients in torch.tensor format
         """
+        lambdas = torch.exp(self.log_lambdas)
+        sigma_f = torch.exp(self.log_sigma_f)
+        sigma_n = torch.exp(self.log_sigma_n)
+
         A = torch.zeros((self.num_train, self.num_train, self.x_dim), device=self.device)
         for k in range(self.x_dim):
             v = torch.reshape(self.X_train[:, k], (self.num_train, 1))
-            A[:, :, k] = (1 / (2 * self.lambdas[k] ** 2)) * torch.square(torch.cdist(v, v, p=2))
+            A[:, :, k] = (1 / (2 * lambdas[k] ** 2)) * torch.square(torch.cdist(v, v, p=2))
 
         dK_dlambda = torch.zeros((self.num_train, self.num_train, self.x_dim), device=self.device)
         for k in range(self.x_dim):
             dK_dlambda[:, :, k] = torch.multiply(self.Kf, A[:, :, k])
 
-        dK_dsigma_f = 2 / self.sigma_f * self.Kf
-        dK_dsigma_n = 2 * self.sigma_n * torch.eye(self.num_train, device=self.device)
+        dK_dsigma_f = 2 / sigma_f * self.Kf
+        dK_dsigma_n = 2 * sigma_n * torch.eye(self.num_train, device=self.device)
 
-        return {'lambda': dK_dlambda, 'sigma_f': dK_dsigma_f, 'sigma_n': dK_dsigma_n}
+        return {'lambda': dK_dlambda.type(torch.float64),
+                'sigma_f': dK_dsigma_f.type(torch.float64),
+                'sigma_n': dK_dsigma_n.type(torch.float64)}
 
     def marginal_likelihood_grad(self, gradient_dict):
         """
@@ -151,47 +213,131 @@ class GaussianProcessRegression(object):
 
         dml_dsigma_f = 1/2*torch.trace(B @ dK_dsigma_f)
         dml_dsigma_n = 1/2*torch.trace(B @ dK_dsigma_n)
-        return {'lambda': dml_dlambda, 'sigma_f': dml_dsigma_f, 'sigma_n': dml_dsigma_n}
 
-    def update_hyperparams(self):
+        dml_dlog_lambda = torch.multiply(dml_dlambda, torch.exp(self.log_lambdas))
+        dml_dlog_sigma_f = dml_dsigma_f * torch.exp(self.log_sigma_f)
+        dml_dlog_sigma_n = dml_dsigma_n * torch.exp(self.log_sigma_n)
+        return {'lambda': dml_dlambda, 'sigma_f': dml_dsigma_f, 'sigma_n': dml_dsigma_n,
+                'log_lambda': dml_dlog_lambda, 'log_sigma_f': dml_dlog_sigma_f, 'log_sigma_n': dml_dlog_sigma_n}
+
+    def compute_marginal_likelihood(self):
         """
-        TODO: Figure out constraints and convergence condition
-        Find estimate of GP hyperparameters (listed in the constructor) by running
-        gradient ascent on marginal likelihood. Does num_iters number of iterations
-        unless gradient reaches a local min beforehand.
+        Computes and returns the marginal likelihood.
         """
-        num_iters = 10
-        alpha = 0.01
+        return (-1/2 * self.y_train.mT @ self.Ky_inv @ self.y_train -
+                1/2 * torch.log(torch.linalg.det(self.Ky)) -
+                self.num_train/2 * np.log(2*np.pi))
+
+    def compute_pred_train_covariance(self, X_pred):
+        """
+        Compute K(X*, X_train) matrix found in equations (2.22), (2.23).
+
+        Parameters:
+        ----------
+        X_pred: (p, x_dim) or (x_dim,) np.array
+
+        Returns:
+        -------
+        (p, num_train) torch.tensor if p>1 observations,
+        (num_train,) torch.tensor if one observation.
+        """
+        X_pred = torch.tensor(X_pred, device=self.device).type(torch.float64)
+
+        # If predicting on multiple test points at once
+        if len(X_pred.shape) == 2:
+            lambdas = torch.exp(self.log_lambdas)
+            sigma_f = torch.exp(self.log_sigma_f)
+
+            X_train_mod = self.X_train * torch.sqrt(1 / lambdas)
+            X_pred_mod = X_pred * torch.sqrt(1 / lambdas)
+            dist_mat = torch.cdist(X_pred_mod, X_train_mod, p=2)
+            K_pred_train = (sigma_f ** 2) * torch.exp(-1 / 2 * torch.square(dist_mat))
+
+        # If just one test point
+        else:
+            # Might be faster to do this fully in Python
+            K_pred_train = torch.tensor([self.se_kernel(X_pred, self.X_train[i, :]) for i in range(self.num_train)],
+                                        device=self.device).type(torch.float64)
+        return K_pred_train
+
+    def predict_latent_vars(self, X_pred, covar=False, targets=False):
+        """
+        Implements equation 2.23 & 2.24.
+
+        Parameters:
+        ----------
+        X_pred: (p, x_dim) or (x_dim,) np.array
+        covar: boolean
+            If set to True, method returns covariance of predictions (whether the method is used
+            to predict latent variables f or targets y).
+        targets: boolean
+            If set to True, method returns covariance of targets y instead of latent variables f.
+            If covar=False, changes nothing.
+
+        Returns:
+        -------
+        np.array and None if covar=False, else two np.array
+        """
+        K_pred_train = self.compute_pred_train_covariance(X_pred)
+        f_pred = K_pred_train @ self.Ky_inv @ self.y_train
+
+        if not covar:
+            return f_pred.cpu().detach().numpy(), None
+        else:
+            # Convert to Torch
+            lambdas = torch.exp(self.log_lambdas)
+            sigma_f = torch.exp(self.log_sigma_f)
+            sigma_n = torch.exp(self.log_sigma_n)
+            X_pred = torch.tensor(X_pred, device=self.device).type(torch.float64)
+
+            # Compute covariance matrix between predictions
+            X_pred_mod = X_pred * torch.sqrt(1 / lambdas)
+            dist_mat = torch.cdist(X_pred_mod, X_pred_mod, p=2)
+            K_pred_pred = (sigma_f ** 2) * torch.exp(-1 / 2 * torch.square(dist_mat))
+
+            cov = K_pred_pred - K_pred_train @ self.Ky_inv @ K_pred_train.mT
+
+            # If predicting targets and not latent variables
+            if targets:
+                p = X_pred.shape[0] if len(X_pred.shape) == 2 else 1
+                cov += (sigma_n ** 2) * torch.eye(p, device=self.device).type(torch.float64)
+
+            return f_pred.cpu().detach().numpy(), cov.cpu().detach().numpy()
+
+    def update_hyperparams(self, num_iters=1000):
         for iter in range(num_iters):
-            print('iter: {}, lambda: {}, sigma_f: {}, sigma_n: {}'.format(iter,
-                                                                          self.lambdas.cpu().detach().numpy(),
-                                                                          self.sigma_f.cpu().detach().numpy(),
-                                                                          self.sigma_n.cpu().detach().numpy()))
-            Ky_grad_dict = self.kernel_matrix_gradient()
-            ml_grad_dict = self.marginal_likelihood_grad(Ky_grad_dict)
+            self.optimizer.zero_grad()
+            ml = self.compute_marginal_likelihood()
+            ml.backward()
 
-            # Update hyperparameters
-            with torch.no_grad():
-                self.lambdas += alpha * ml_grad_dict['lambda']
-                self.sigma_f += alpha * ml_grad_dict['sigma_f']
-                self.sigma_n += alpha * ml_grad_dict['sigma_n']
+            # if torch.isnan(self.log_lambdas.grad).any().item() or torch.isnan(self.log_sigma_f.grad).any().item() or torch.isnan(self.log_sigma_n.grad).any().item():
+            #     grad_dict = self.kernel_matrix_gradient()
+            #     ml_grad = self.marginal_likelihood_grad(grad_dict)
+            #     self.log_lambdas.grad = ml_grad['log_lambda']
+            #     self.log_sigma_f.grad = ml_grad['log_sigma_f']
+            #     self.log_sigma_n.grad = ml_grad['log_sigma_n']
 
-                # If sigmas negative set to zero
-                self.lambdas[self.lambdas < 0] = 0.
-                self.sigma_f[self.sigma_f < 0] = 0.
-                self.sigma_n[self.sigma_n < 0] = 0.
+            self.optimizer.step()
+            self.build_Ky_inv_mat()  # Update matrices used to compute marginal likelihood under new hyperparameters
 
-            print('lambda gradient norm: ', torch.linalg.norm(ml_grad_dict['lambda']))
-            print('sigma_f gradient: ', ml_grad_dict['sigma_f'])
-            print('sigma_e gradient: ', ml_grad_dict['sigma_n'])
-            print('----------------------------------------------')
+            print('Iter: ', iter)
+            print('ml: ', ml.item())
+            print('lambdas: ', torch.exp(self.log_lambdas).cpu().detach().numpy())
+            print('sigma_f: ', torch.exp(self.log_sigma_f).item())
+            print('sigma_n: ', torch.exp(self.log_sigma_n).item())
 
-            norm_sum = (torch.linalg.norm(ml_grad_dict['lambda']) +
-                        torch.linalg.norm(ml_grad_dict['sigma_f']) +
-                        torch.linalg.norm(ml_grad_dict['sigma_n']))
-            if norm_sum.item() < 1e-5:
-                # Some parts of likelihood can be really flat, so maybe should use a different condition?
+            log_lambdas_grad = self.log_lambdas.grad.cpu().detach().numpy()
+            log_sigma_f_grad = self.log_sigma_f.grad.item()
+            log_sigma_n_grad = self.log_sigma_n.grad.item()
+
+            print('log_lambdas.grad: ', log_lambdas_grad)
+            print('log_sigma_f.grad: ', log_sigma_f_grad)
+            print('log_sigma_n.grad: ', log_sigma_n_grad)
+
+            print('Ky condition number: ', torch.linalg.cond(self.Ky).item())
+            print('----------------------------------------')
+
+            if ((np.abs(log_lambdas_grad) < 1e-5).all() and
+                    np.abs(log_sigma_f_grad) < 1e-5 and
+                    np.abs(log_sigma_n_grad) < 1e-5):
                 break
-
-            # Update K_f and inverse(K_y)
-            self.build_Ky_inv_mat()

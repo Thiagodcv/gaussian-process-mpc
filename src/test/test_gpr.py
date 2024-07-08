@@ -4,6 +4,8 @@ import numpy as np
 from src.gpr import GaussianProcessRegression
 import torch
 import scipy.linalg.blas as blas
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 
 
 class TestGaussianProcessRegression(TestCase):
@@ -492,8 +494,8 @@ class TestGaussianProcessRegression(TestCase):
         """
         gpr = GaussianProcessRegression(x_dim=2)
         num_train = 100
-        sigma_e = gpr.sigma_n.item()
-        sigma_f = gpr.sigma_f.item()
+        sigma_e = torch.exp(gpr.log_sigma_n).item()
+        sigma_f = torch.exp(gpr.log_sigma_f).item()
         X_train = np.random.standard_normal(size=(num_train, 2))
         y_train = np.random.standard_normal(size=(num_train,))
         x = np.random.standard_normal(size=(2,))
@@ -528,8 +530,7 @@ class TestGaussianProcessRegression(TestCase):
 
         # Now test to see if GPR leads to same result
 
-        for i in range(num_train):
-            gpr.append_train_data(X_train[i, :], y_train[i])
+        gpr.append_train_data(X_train, y_train)
         gpr.append_train_data(x, y)
         gpr_Ky_inv = gpr.Ky_inv.cpu().detach().numpy()
 
@@ -545,8 +546,7 @@ class TestGaussianProcessRegression(TestCase):
         X_train = np.random.standard_normal(size=(num_train, x_dim))
         y_train = np.random.standard_normal(size=(num_train,))
 
-        for i in range(num_train):
-            gpr.append_train_data(X_train[i, :], y_train[i])
+        gpr.append_train_data(X_train, y_train)
 
         # Test build_A_inv_mat calculation of K using Torch
         K1 = gpr.Kf.cpu().detach().numpy()
@@ -555,9 +555,9 @@ class TestGaussianProcessRegression(TestCase):
         grad_dict = gpr.kernel_matrix_gradient()
 
         # Now compute all gradients using finite difference and compare
-        lambdas = gpr.lambdas.cpu().detach().numpy()
-        sigma_f = gpr.sigma_f.cpu().detach().numpy()
-        sigma_e = gpr.sigma_n.cpu().detach().numpy()
+        lambdas = torch.exp(gpr.log_lambdas).cpu().detach().numpy()
+        sigma_f = torch.exp(gpr.log_sigma_f).cpu().detach().numpy()
+        sigma_e = torch.exp(gpr.log_sigma_n).cpu().detach().numpy()
         epsilon = 1e-7
 
         def gauss_kern(x1, x2, e1, e2, e3):
@@ -615,8 +615,7 @@ class TestGaussianProcessRegression(TestCase):
         X_train = np.random.standard_normal(size=(num_train, x_dim))
         y_train = np.random.standard_normal(size=(num_train,))
 
-        for i in range(num_train):
-            gpr.append_train_data(X_train[i, :], y_train[i])
+        gpr.append_train_data(X_train, y_train)
 
         gpr.build_Ky_inv_mat()  # Test build_A_inv_mat()
         grad_dict = gpr.kernel_matrix_gradient()
@@ -624,9 +623,9 @@ class TestGaussianProcessRegression(TestCase):
         print(dml_dict)
 
         # Now compute all gradients using finite difference and compare
-        lambdas = gpr.lambdas.cpu().detach().numpy()
-        sigma_f = gpr.sigma_f.cpu().detach().numpy()
-        sigma_e = gpr.sigma_n.cpu().detach().numpy()
+        lambdas = torch.exp(gpr.log_lambdas).cpu().detach().numpy()
+        sigma_f = torch.exp(gpr.log_sigma_f).cpu().detach().numpy()
+        sigma_e = torch.exp(gpr.log_sigma_n).cpu().detach().numpy()
         epsilon = 1e-10
 
         def gauss_kern(x1, x2, e1, e2, e3):
@@ -692,23 +691,255 @@ class TestGaussianProcessRegression(TestCase):
         self.assertTrue(np.linalg.norm(dml_dsigma_f - sigma_f_finite_diff) < 1e-3)
         self.assertTrue(np.linalg.norm(dml_dsigma_n - sigma_e_finite_diff) < 1e-3)
 
-    def test_update_hyperparams(self):
+    def test_setters_and_getters(self):
+        x_dim = 2
+        lambdas = np.array([4.3, 6.5])
+        sigma_f = 5.3
+        sigma_n = 2.0
+
+        gpr = GaussianProcessRegression(x_dim)
+        gpr.set_lambdas(lambdas)
+        gpr.set_sigma_f(sigma_f)
+        gpr.set_sigma_n(sigma_n)
+
+        self.assertTrue(np.linalg.norm(lambdas - gpr.get_lambdas()) < 1e-5)
+        self.assertTrue(np.linalg.norm(sigma_f - gpr.get_sigma_f()) < 1e-5)
+        self.assertTrue(np.linalg.norm(sigma_n - gpr.get_sigma_n()) < 1e-5)
+
+    def test_append_train_data(self):
         """
-        TODO: Major issue, sigma_n becomes negative. This is WIP for now.
+        Test gpr.append_train_data() method were we insert both one observation and multiple observations.
+        """
+        # Hyperparameters
+        lambdas = np.array([1., 2.])
+        sigma_f = 1.2
+        sigma_n = 1.5
+
+        # Functions to input
+        x_dim = 2
+        x1 = np.array([1., 1.])
+        x234 = np.array([[2., 2.],
+                         [3., 3.],
+                         [4., 4.]])
+        y1 = np.array([1.])
+        y234 = np.array([2., 3., 4.])
+
+        X_train = np.concatenate((x1[None, :], x234), axis=0)
+        y_train = np.concatenate((y1, y234), axis=0)
+
+        def gauss_kern(x1, x2):
+            Lambda_inv = np.diag(1 / lambdas)
+            return (sigma_f ** 2) * np.exp(-1 / 2 * (x1 - x2).T @ Lambda_inv @ (x1 - x2))
+
+        gpr = GaussianProcessRegression(x_dim=x_dim)
+        gpr.set_lambdas(lambdas)
+        gpr.set_sigma_f(sigma_f)
+        gpr.set_sigma_n(sigma_n)
+
+        # Test 1x1 covariance matrix
+        gpr.append_train_data(x1, y1)
+        Ky1 = gauss_kern(x1, x1) + sigma_n**2
+
+        self.assertTrue(np.linalg.norm(Ky1 - gpr.Ky.cpu().detach().numpy()) < 1e-5)
+        self.assertTrue(gpr.num_train == 1)
+
+        gpr.append_train_data(x234, y234)
+        Ky1234 = np.array([[gauss_kern(X_train[i, :], X_train[j, :]) for i in range(4)] for j in range(4)])
+        Ky1234 += sigma_n**2 * np.identity(4)
+        self.assertTrue(np.linalg.norm(Ky1234 - gpr.Ky.cpu().detach().numpy()) < 1e-5)
+        self.assertTrue(gpr.num_train == 4)
+
+    def test_append_train_data_mat_first(self):
+        """
+        Test gpr.append_train_data() where the first data fed into the gpr class is a bundle of more
+        than one observations.
         """
         x_dim = 2
-        num_train = 1000
+
+        # Hyperparameters
+        lambdas = np.array([1., 2.])
+        sigma_f = 1.2
+        sigma_n = 1.5
+
         gpr = GaussianProcessRegression(x_dim=x_dim)
+        gpr.set_lambdas(lambdas)
+        gpr.set_sigma_f(sigma_f)
+        gpr.set_sigma_n(sigma_n)
 
-        def f(x):
-            return x.T @ x
+        X_train = np.array([[1., 1.],
+                            [2., 2.],
+                            [3., 3.],
+                            [4., 4.]])
+        y_train = np.array([1., 2., 3., 4.])
 
+        gpr.append_train_data(X_train, y_train)
+
+        def gauss_kern(x1, x2):
+            Lambda_inv = np.diag(1 / lambdas)
+            return (sigma_f ** 2) * np.exp(-1 / 2 * (x1 - x2).T @ Lambda_inv @ (x1 - x2))
+
+        Ky_test = np.array([[gauss_kern(X_train[i, :], X_train[j, :]) for i in range(4)] for j in range(4)])
+        Ky_test += sigma_n ** 2 * np.identity(4)
+
+        self.assertTrue(np.linalg.norm(gpr.Ky.cpu().detach().numpy() - Ky_test) < 1e-5)
+
+    def test_compute_pred_train_covariance(self):
+        """
+        Test compute_pred_train_covariance() to see if it works when X_pred is both a 1d array
+        and 2d array (i.e. multiple observations).
+        """
+        x_dim = 2
+        num_train = 4
+        num_pred = 2
+
+        # Hyperparameters
+        lambdas = np.array([1., 2.])
+        sigma_f = 1.2
+        sigma_n = 1.5
+
+        X_train = np.array([[1., 1.],
+                            [2., 2.],
+                            [3., 3.],
+                            [4., 4.]])
+        y_train = np.array([1., 2., 3., 4.])
+        X_pred = np.array([[1., 2.],
+                           [3., 4.]])
+
+        def gauss_kern(x1, x2):
+            Lambda_inv = np.diag(1 / lambdas)
+            return (sigma_f ** 2) * np.exp(-1 / 2 * (x1 - x2).T @ Lambda_inv @ (x1 - x2))
+
+        K_pred_test = np.array([[gauss_kern(X_train[i, :], X_pred[j, :]) for i in range(num_train)]
+                                for j in range(num_pred)])
+
+        gpr = GaussianProcessRegression(x_dim)
+        gpr.set_lambdas(lambdas)
+        gpr.set_sigma_f(sigma_f)
+        gpr.set_sigma_n(sigma_n)
+
+        gpr.append_train_data(X_train, y_train)
+        K_pred = gpr.compute_pred_train_covariance(X_pred)
+        K_pred = K_pred.cpu().detach().numpy()
+
+        self.assertTrue(np.linalg.norm(K_pred_test - K_pred) < 1e-5)
+
+        # Now try only one observation
+        x_pred1 = np.array([0.5, 0.5])
+        K_pred_test1 = np.array([gauss_kern(X_train[i, :], x_pred1) for i in range(num_train)])
+        K_pred1 = gpr.compute_pred_train_covariance(x_pred1)
+        K_pred1 = K_pred1.cpu().detach().numpy()
+
+        self.assertTrue(np.linalg.norm(K_pred_test1 - K_pred1) < 1e-5)
+
+    def test_predict_latent_vars(self):
+        """
+        Test the predict_latent_vars() method.
+        """
+        x_dim = 2
+        num_train = 4
+        num_pred = 2
+
+        # Hyperparameters
+        lambdas = np.array([1., 2.])
+        sigma_f = 1.2
+        sigma_n = 2
+
+        X_train = np.array([[1., 1.],
+                            [2., 2.],
+                            [3., 3.],
+                            [4., 4.]])
+        y_train = np.array([1., 2., 3., 4.])
+        X_pred = np.array([[1., 2.],
+                           [3., 4.]])
+
+        gpr = GaussianProcessRegression(x_dim)
+        gpr.set_lambdas(lambdas)
+        gpr.set_sigma_f(sigma_f)
+        gpr.set_sigma_n(sigma_n)
+        gpr.append_train_data(X_train, y_train)
+
+        f_mean1, _ = gpr.predict_latent_vars(X_pred)
+        print(f_mean1)
+
+        f_mean2, f_cov2 = gpr.predict_latent_vars(X_pred, covar=True)
+        print(f_mean2)
+        print(f_cov2)
+
+        f_mean3, f_cov3 = gpr.predict_latent_vars(X_pred, covar=True, targets=True)
+        print(f_mean3)
+        print(f_cov3)
+        self.assertTrue(np.linalg.norm(f_cov3 - (f_cov2 + sigma_n**2 * np.identity(2))) < 1e-5)
+
+    def test_1d_gpr(self):
+        gpr = GaussianProcessRegression(x_dim=1)
+
+        def f(x): return x**2
+        X_train = np.array([i for i in range(-5, 5 + 1)])
+        X_train = X_train[:, None]
+        y_train = np.array([f(X_train[i, :].item()) for i in range(X_train.shape[0])]) + np.random.normal(loc=0, scale=1.0, size=len(X_train))
+
+        gpr.append_train_data(X_train, y_train)
+
+        X_pred = np.linspace(-6, 6, 200)
+        X_pred = X_pred[:, None]
+
+        # Plot data
+        lambdas = [0.5]  # [i/10 for i in range(1, 10 + 1)]
+        sigma_f = 5
+        sigma_n = 1
+        gpr.set_sigma_f(sigma_f)
+        gpr.set_sigma_n(sigma_n)
+
+        for lambd in lambdas:
+            gpr.set_lambdas(np.array(lambd))
+            gpr.build_Ky_inv_mat()
+
+            mean, covar = gpr.predict_latent_vars(X_pred, covar=True)
+            mean = mean.squeeze()
+            ci95 = 2*np.sqrt(np.diag(covar))
+            ml = gpr.compute_marginal_likelihood().item()
+
+            fig, ax = plt.subplots()
+            ax.plot(X_pred.squeeze(), mean)
+            ax.scatter(X_train.squeeze(), y_train, color='red')
+            ax.fill_between(X_pred.squeeze(), (mean - ci95), (mean + ci95), alpha=.1)
+
+            plt.title('ML: {:.2f}, lambda: {:.2f}, sigma_f: {:.2f}, sigma_n: {:.2f}'.
+                      format(ml, lambd, sigma_f, sigma_n))
+            plt.show()
+
+    def test_update_hyperparams(self):
+        """
+        Test update_hyperparams().
+        """
+        gpr = GaussianProcessRegression(x_dim=1)
+
+        def f(x): return x ** 2
+
+        X_train = np.array([i for i in range(-5, 5 + 1)])
+        X_train = X_train[:, None]
+        y_train = (np.array([f(X_train[i, :].item()) for i in range(X_train.shape[0])]) +
+                   np.random.normal(loc=0, scale=1.0, size=len(X_train)))
+        gpr.append_train_data(X_train, y_train)
+        gpr.update_hyperparams()
+
+    def test_input_scalar_y(self):
+        """
+        Check to see that we can input scalar y's into GPR class.
+        """
+        num_train = 10
+        x_dim = 2
         X_train = np.random.standard_normal(size=(num_train, x_dim))
-        y_train = np.array([f(X_train[i, :]) for i in range(num_train)])
+        y_train = np.random.standard_normal(size=(num_train, 1))
+
+        gpr1 = GaussianProcessRegression(x_dim)
+        gpr2 = GaussianProcessRegression(x_dim)
 
         for i in range(num_train):
-            print(i)
-            gpr.append_train_data(X_train[i, :], y_train[i])
+            # pass in scalar y's
+            gpr1.append_train_data(X_train[i, :], y_train[i].item())
+            self.assertTrue(np.isscalar(y_train[i].item()))
 
-        print("Done accumulating data")
-        gpr.update_hyperparams()
+        gpr2.append_train_data(X_train, y_train)
+
+        self.assertTrue(np.linalg.norm(gpr1.Kf.cpu().detach().numpy() - gpr2.Kf.cpu().detach().numpy()) < 1e-5)
