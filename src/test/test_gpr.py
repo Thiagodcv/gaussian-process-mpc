@@ -922,3 +922,24 @@ class TestGaussianProcessRegression(TestCase):
                    np.random.normal(loc=0, scale=1.0, size=len(X_train)))
         gpr.append_train_data(X_train, y_train)
         gpr.update_hyperparams()
+
+    def test_input_scalar_y(self):
+        """
+        Check to see that we can input scalar y's into GPR class.
+        """
+        num_train = 10
+        x_dim = 2
+        X_train = np.random.standard_normal(size=(num_train, x_dim))
+        y_train = np.random.standard_normal(size=(num_train, 1))
+
+        gpr1 = GaussianProcessRegression(x_dim)
+        gpr2 = GaussianProcessRegression(x_dim)
+
+        for i in range(num_train):
+            # pass in scalar y's
+            gpr1.append_train_data(X_train[i, :], y_train[i].item())
+            self.assertTrue(np.isscalar(y_train[i].item()))
+
+        gpr2.append_train_data(X_train, y_train)
+
+        self.assertTrue(np.linalg.norm(gpr1.Kf.cpu().detach().numpy() - gpr2.Kf.cpu().detach().numpy()) < 1e-5)

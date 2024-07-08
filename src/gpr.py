@@ -82,12 +82,17 @@ class GaussianProcessRegression(object):
         Parameters
         ----------
         x: (x_dim, ) numpy array
-        y: (num_obs, ) numpy array (even if num_obs=1)
+        y: (num_obs, ) numpy array or scalar
         """
-        num_obs = len(y)
+        if not np.isscalar(y):
+            num_obs = len(y)
+            y = y[:, None]
+        else:
+            num_obs = 1
+            y = np.array([y])[:, None]
+
         if num_obs == 1:
             x = np.reshape(x, (1, self.x_dim))
-        y = y[:, None]
 
         x = torch.tensor(x, requires_grad=False).type(torch.float64).to(self.device)
         y = torch.tensor(y, requires_grad=False).type(torch.float64).to(self.device)
