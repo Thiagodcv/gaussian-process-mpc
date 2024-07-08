@@ -887,9 +887,9 @@ class TestGaussianProcessRegression(TestCase):
         X_pred = X_pred[:, None]
 
         # Plot data
-        lambdas = [22.2]  # [i/10 for i in range(1, 10 + 1)]
-        sigma_f = 1
-        sigma_n = 3
+        lambdas = [0.5]  # [i/10 for i in range(1, 10 + 1)]
+        sigma_f = 5
+        sigma_n = 1
         gpr.set_sigma_f(sigma_f)
         gpr.set_sigma_n(sigma_n)
 
@@ -898,10 +898,15 @@ class TestGaussianProcessRegression(TestCase):
             gpr.build_Ky_inv_mat()
 
             mean, covar = gpr.predict_latent_vars(X_pred, covar=True)
+            mean = mean.squeeze()
+            ci95 = 2*np.sqrt(np.diag(covar))
             ml = gpr.compute_marginal_likelihood().item()
 
-            plt.plot(X_pred.squeeze(), mean)
-            plt.scatter(X_train.squeeze(), y_train, color='red')
+            fig, ax = plt.subplots()
+            ax.plot(X_pred.squeeze(), mean)
+            ax.scatter(X_train.squeeze(), y_train, color='red')
+            ax.fill_between(X_pred.squeeze(), (mean - ci95), (mean + ci95), alpha=.1)
+
             plt.title('ML: {:.2f}, lambda: {:.2f}, sigma_f: {:.2f}, sigma_n: {:.2f}'.
                       format(ml, lambd, sigma_f, sigma_n))
             plt.show()
