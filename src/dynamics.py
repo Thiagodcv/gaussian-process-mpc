@@ -24,7 +24,7 @@ class Dynamics(object):
         """
         TODO: Think this method through and write tests.
         Updates bundle of GPR models given a state, action, and next state tuple.
-        
+
         Parameters:
         ----------
         state: np.array
