@@ -4,6 +4,7 @@ import scipy
 
 def mean_prop(K, Lambda, u, S, X_train, y_train):
     """
+    TODO: Use Numba to speed up computation
     Computes the mean of predictive distribution (21) using an exact formula.
     Assumes we are using Gaussian kernels.
 

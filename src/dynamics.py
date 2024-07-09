@@ -1,4 +1,5 @@
 from src.gpr import GaussianProcessRegression
+from src.tools.uncertainty_prop import mean_prop, variance_prop, covariance_prop
 import numpy as np
 
 
@@ -22,7 +23,7 @@ class Dynamics(object):
 
     def append_train_data(self, state, action, next_state):
         """
-        TODO: Think this method through and write tests.
+        TODO: Write tests
         Updates bundle of GPR models given a state, action, and next state tuple.
 
         Parameters:
@@ -32,13 +33,58 @@ class Dynamics(object):
         next_state: np.array
         """
         x = np.concatenate((state, action))
-        self.gpr_err[0].append_train_data(x, next_state[0])
 
-        if self.state_dim > 1:
+        for i in range(self.state_dim):
+            self.gpr_err[i].append_train_data(x, next_state[i])
+
+    def forward_propagate(self, horizon, curr_state, actions):
+        """
+        Given `horizon` number of actions, compute the expected states and state covariances.
+        Note that because this method only takes actions as arguments (and not states), this method
+        corresponds to a shooting method.
+
+        Parameters:
+        ----------
+        horizon: int
+        curr_state: np.array with dimensions (state_dim,)
+        actions: np.array with dimensions (horizon, action_dim)
+        """
+        state_means = np.zeros((horizon+1, self.state_dim))
+        state_means[0, :] = curr_state
+        state_covars = np.zeros((horizon+1, self.state_dim, self.state_dim))
+        state_covars[0, :, :] = 1e-3 * np.identity(self.state_dim)
+
+        X_train = self.gpr_err[0].X_train
+        y_train = self.gpr_err[0].y_train
+
+        for t in range(1, horizon + 1):
+            mean = state_means[t - 1, :]
+            covar = state_covars[t - 1, :, :]
+
+            for s_dim in range(self.state_dim):
+                # compute means for each state dimension
+                K = self.gpr_err[s_dim].Kf
+                lambda_mat = np.diag(self.gpr_err[s_dim].get_lambdas())
+
+                state_means[t, s_dim] = mean_prop(K, lambda_mat, mean, covar, X_train, y_train)
+
+                # compute variances for each state dimension
+                state_covars[t, s_dim, s_dim] = variance_prop(K, lambda_mat, mean, covar, X_train, y_train)
+
+            # Find lower diagonal covariances
             for i in range(1, self.state_dim):
-                # requires_grad is False for X_train, so can pass in
-                self.gpr_err[i].X_train = self.gpr_err[0].X_train
-                self.gpr_err[i].num_train = self.gpr_err[0].num_train
+                for j in range(i - 1):
+                    K_i = self.gpr_err[i].Kf
+                    lambda_mat_i = np.diag(self.gpr_err[i].get_lambdas())
 
-                # Because each GP has its own lambda parameters, can't just pass in K matrices from one to the other
-                self.gpr_err[i].build_Ky_inv_mat()
+                    K_j = self.gpr_err[j].Kf
+                    lambda_mat_j = np.diag(self.gpr_err[j].get_lambdas())
+
+                    # compute covariances between different state dimensions
+                    state_covars[t, i, j] = covariance_prop(K_i, K_j,
+                                                            lambda_mat_i, lambda_mat_j, mean, covar, X_train, y_train)
+
+            # Copy values from lower diagonal to upper diagonal
+            state_covars[t, :, :] = state_covars[t, :, :].T - np.diag(np.diag(state_covars[t, :, :]))
+
+        return state_means, state_covars
