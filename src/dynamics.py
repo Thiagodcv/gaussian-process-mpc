@@ -15,6 +15,13 @@ class Dynamics(object):
             The dimension of the action space
         nominal_model: function
             The nominal model of the system
+
+        Returns:
+        -------
+        np.array
+            State expectations
+        np.array
+            State covariances
         """
         self.state_dim = state_dim
         self.action_dim = action_dim
