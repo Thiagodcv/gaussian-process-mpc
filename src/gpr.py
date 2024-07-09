@@ -9,6 +9,15 @@ class GaussianProcessRegression(object):
     """
 
     def __init__(self, x_dim, nominal_model=None):
+        """
+        Parameters:
+        ----------
+        x_dim: int
+            Dimension of input variable.
+        nominal_model: function
+            A nominal mean function. Takes a torch tensor as input (each row is a different observation) and
+            returns the nominal model evaluated at those observations.
+        """
         # Device
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -192,7 +201,7 @@ class GaussianProcessRegression(object):
 
     def marginal_likelihood_grad(self, gradient_dict):
         """
-        TODO: implement nominal model functionality
+        TODO: seems to be returning wrong gradients. Since using PyTorch autograd, this isn't a priority at the moment.
         Computes the gradients of the marginal likelihood with respect to lambda_j, sigma_n, and sigma_f.
         Assumes K_f and inverse(K_y) have already been fully updated.
 
@@ -230,7 +239,6 @@ class GaussianProcessRegression(object):
 
     def compute_marginal_likelihood(self):
         """
-        TODO: implement nominal model functionality
         Computes and returns the marginal likelihood.
         """
         if self.f_nom is None:
@@ -276,7 +284,6 @@ class GaussianProcessRegression(object):
 
     def predict_latent_vars(self, X_pred, covar=False, targets=False):
         """
-        TODO: implement nominal model functionality
         Implements equation 2.23 & 2.24.
 
         Parameters:
@@ -298,7 +305,8 @@ class GaussianProcessRegression(object):
         if self.f_nom is None:
             f_pred = K_pred_train @ self.Ky_inv @ self.y_train
         else:
-            f_pred = K_pred_train @ self.Ky_inv @ (self.y_train - self.f_nom(self.X_train)) + self.f_nom(X_pred)
+            X_pred_torch = torch.tensor(X_pred, device=self.device).type(torch.float64)
+            f_pred = K_pred_train @ self.Ky_inv @ (self.y_train - self.f_nom(self.X_train)) + self.f_nom(X_pred_torch)
 
         if not covar:
             return f_pred.cpu().detach().numpy(), None
