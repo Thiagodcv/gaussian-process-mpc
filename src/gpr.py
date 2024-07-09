@@ -8,7 +8,16 @@ class GaussianProcessRegression(object):
     In this class we use the squared-exponential (SE) covariance function.
     """
 
-    def __init__(self, x_dim):
+    def __init__(self, x_dim, nominal_model=None):
+        """
+        Parameters:
+        ----------
+        x_dim: int
+            Dimension of input variable.
+        nominal_model: function
+            A nominal mean function. Takes a torch tensor as input (each row is a different observation) and
+            returns the nominal model evaluated at those observations.
+        """
         # Device
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -29,6 +38,9 @@ class GaussianProcessRegression(object):
         self.log_lambdas = torch.zeros(x_dim, device=self.device).type(torch.float64).requires_grad_()
         self.log_sigma_n = torch.tensor(0.0, device=self.device).type(torch.float64).requires_grad_()
         self.log_sigma_f = torch.tensor(0.0, device=self.device).type(torch.float64).requires_grad_()
+
+        # Nominal model (must be capable of batch computation)
+        self.f_nom = nominal_model
 
         # Optimization
         self.optimizer = torch.optim.Adam(params=[self.log_lambdas, self.log_sigma_n, self.log_sigma_f],
@@ -189,6 +201,7 @@ class GaussianProcessRegression(object):
 
     def marginal_likelihood_grad(self, gradient_dict):
         """
+        TODO: seems to be returning wrong gradients. Since using PyTorch autograd, this isn't a priority at the moment.
         Computes the gradients of the marginal likelihood with respect to lambda_j, sigma_n, and sigma_f.
         Assumes K_f and inverse(K_y) have already been fully updated.
 
@@ -206,7 +219,11 @@ class GaussianProcessRegression(object):
         dK_dsigma_f = gradient_dict['sigma_f']
         dK_dsigma_n = gradient_dict['sigma_n']
 
-        alpha = self.Ky_inv @ self.y_train
+        if self.f_nom is None:
+            alpha = self.Ky_inv @ self.y_train
+        else:
+            alpha = self.Ky_inv @ (self.y_train - self.f_nom(self.X_train))
+
         B = alpha @ alpha.mT - self.Ky_inv
         for i in range(self.x_dim):
             dml_dlambda[i] = 1/2*torch.trace(B @ dK_dlambda[:, :, i])
@@ -224,9 +241,14 @@ class GaussianProcessRegression(object):
         """
         Computes and returns the marginal likelihood.
         """
-        return (-1/2 * self.y_train.mT @ self.Ky_inv @ self.y_train -
-                1/2 * torch.log(torch.linalg.det(self.Ky)) -
-                self.num_train/2 * np.log(2*np.pi))
+        if self.f_nom is None:
+            return (-1/2 * self.y_train.mT @ self.Ky_inv @ self.y_train -
+                    1/2 * torch.log(torch.linalg.det(self.Ky)) -
+                    self.num_train/2 * np.log(2*np.pi))
+        else:
+            return (-1/2 * (self.y_train - self.f_nom(self.X_train)).mT @ self.Ky_inv @ (self.y_train - self.f_nom(self.X_train)) -
+                    1/2 * torch.log(torch.linalg.det(self.Ky)) -
+                    self.num_train/2 * np.log(2*np.pi))
 
     def compute_pred_train_covariance(self, X_pred):
         """
@@ -279,7 +301,12 @@ class GaussianProcessRegression(object):
         np.array and None if covar=False, else two np.array
         """
         K_pred_train = self.compute_pred_train_covariance(X_pred)
-        f_pred = K_pred_train @ self.Ky_inv @ self.y_train
+
+        if self.f_nom is None:
+            f_pred = K_pred_train @ self.Ky_inv @ self.y_train
+        else:
+            X_pred_torch = torch.tensor(X_pred, device=self.device).type(torch.float64)
+            f_pred = K_pred_train @ self.Ky_inv @ (self.y_train - self.f_nom(self.X_train)) + self.f_nom(X_pred_torch)
 
         if not covar:
             return f_pred.cpu().detach().numpy(), None
