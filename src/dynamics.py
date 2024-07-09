@@ -46,6 +46,7 @@ class Dynamics(object):
 
     def forward_propagate(self, horizon, curr_state, actions):
         """
+        TODO: Something is wrong. How do actions get incorporated?
         Given `horizon` number of actions, compute the expected states and state covariances.
         Note that because this method only takes actions as arguments (and not states), this method
         corresponds to a shooting method.
