@@ -5,7 +5,7 @@ import numpy as np
 
 class Dynamics(object):
 
-    def __init__(self, state_dim, action_dim, nominal_model):
+    def __init__(self, state_dim, action_dim, nominal_models):
         """
         Parameters:
         ----------
@@ -13,8 +13,8 @@ class Dynamics(object):
             The dimension of the state space
         action_dim: int
             The dimension of the action space
-        nominal_model: function
-            The nominal model of the system
+        nominal_models: list of functions
+            The nominal model of the system; Each function in the list represents a dimension
 
         Returns:
         -------
@@ -25,8 +25,9 @@ class Dynamics(object):
         """
         self.state_dim = state_dim
         self.action_dim = action_dim
-        self.nominal_model = nominal_model
-        self.gpr_err = [GaussianProcessRegression(x_dim=self.state_dim + self.action_dim) for _ in range(state_dim)]
+        self.nominal_models = nominal_models
+        self.gpr_err = [GaussianProcessRegression(self.state_dim + self.action_dim,
+                                                  nominal_models[i]) for i in range(state_dim)]
 
     def append_train_data(self, state, action, next_state):
         """
@@ -66,8 +67,14 @@ class Dynamics(object):
         y_train = self.gpr_err[0].y_train
 
         for t in range(1, horizon + 1):
-            mean = state_means[t - 1, :]
-            covar = state_covars[t - 1, :, :]
+            mean = np.concatenate(state_means[t - 1, :], actions[t - 1, :])
+
+            # Compute covariance matrix
+            covar_top = np.concatenate((state_covars[t - 1, :, :], np.zeros((self.action_dim, self.action_dim))),
+                                       axis=1)
+            covar_bottom = np.concatenate((np.zeros((self.action_dim, self.action_dim)),
+                                           1e-5*np.identity(self.action_dim)), axis=1)
+            covar = np.concatenate((covar_top, covar_bottom), axis=0)
 
             for s_dim in range(self.state_dim):
                 # compute means for each state dimension
