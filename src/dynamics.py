@@ -5,7 +5,7 @@ import numpy as np
 
 class Dynamics(object):
 
-    def __init__(self, state_dim, action_dim, nominal_models):
+    def __init__(self, state_dim, action_dim, nominal_models=None):
         """
         Parameters:
         ----------
@@ -13,7 +13,7 @@ class Dynamics(object):
             The dimension of the state space
         action_dim: int
             The dimension of the action space
-        nominal_models: list of functions
+        nominal_models: list of functions or None
             The nominal model of the system; Each function in the list represents a dimension
 
         Returns:
@@ -26,8 +26,12 @@ class Dynamics(object):
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.nominal_models = nominal_models
-        self.gpr_err = [GaussianProcessRegression(self.state_dim + self.action_dim,
-                                                  nominal_models[i]) for i in range(state_dim)]
+
+        if self.nominal_models is None:
+            self.gpr_err = [GaussianProcessRegression(self.state_dim + self.action_dim) for _ in range(state_dim)]
+        else:
+            self.gpr_err = [GaussianProcessRegression(self.state_dim + self.action_dim,
+                                                      nominal_models[i]) for i in range(state_dim)]
 
     def append_train_data(self, state, action, next_state):
         """
@@ -47,7 +51,7 @@ class Dynamics(object):
 
     def forward_propagate(self, horizon, curr_state, actions):
         """
-        TODO: Something is wrong. How do actions get incorporated?
+        TODO: Write tests
         Given `horizon` number of actions, compute the expected states and state covariances.
         Note that because this method only takes actions as arguments (and not states), this method
         corresponds to a shooting method.
@@ -73,7 +77,7 @@ class Dynamics(object):
             covar_top = np.concatenate((state_covars[t - 1, :, :], np.zeros((self.action_dim, self.action_dim))),
                                        axis=1)
             covar_bottom = np.concatenate((np.zeros((self.action_dim, self.action_dim)),
-                                           1e-5*np.identity(self.action_dim)), axis=1)
+                                           1e-3*np.identity(self.action_dim)), axis=1)
             covar = np.concatenate((covar_top, covar_bottom), axis=0)
 
             for s_dim in range(self.state_dim):
@@ -100,6 +104,6 @@ class Dynamics(object):
                                                             lambda_mat_i, lambda_mat_j, mean, covar, X_train, y_train)
 
             # Copy values from lower diagonal to upper diagonal
-            state_covars[t, :, :] = state_covars[t, :, :].T - np.diag(np.diag(state_covars[t, :, :]))
+            state_covars[t, :, :] += state_covars[t, :, :].T - np.diag(np.diag(state_covars[t, :, :]))
 
         return state_means, state_covars
