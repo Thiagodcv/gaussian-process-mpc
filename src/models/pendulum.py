@@ -51,4 +51,6 @@ def true_model_om(x, u):
     if len(x.shape) == 2:
         return -b/m * x[:, 1] * delta_t - g/l * np.sin(x[:, 0]) * delta_t + x[:, 1] + 1/(m*l**2) * u.squeeze() * delta_t
     else:
+        if not np.isscalar(u):
+            u = u.item()
         return -b/m * x[1] * delta_t - g/l * np.sin(x[0]) * delta_t + x[1] + 1 / (m*l**2) * u * delta_t
