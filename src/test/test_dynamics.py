@@ -3,6 +3,7 @@ from src.models.pendulum import nom_model_th, nom_model_om, true_model_th, true_
 from unittest import TestCase
 import numpy as np
 import torch
+import cProfile
 
 
 class TestDynamics(TestCase):
@@ -68,7 +69,11 @@ class TestDynamics(TestCase):
         self.assertTrue(np.linalg.norm(dynamics.gpr_err[0].y_train.cpu().detach().numpy() - next_state_th) < 1e-5)
         self.assertTrue(np.linalg.norm(dynamics.gpr_err[1].y_train.cpu().detach().numpy() - next_state_om) < 1e-5)
 
-    def test_forward_propagate(self):
+    def test_forward_propagate_nominal_model(self):
+        """
+        TODO: Nominal model functionality not fully implemented yet. Will return to this afterwards.
+        Test the forward propagate algorithm using a nominal model.
+        """
         dynamics = Dynamics(state_dim=2, action_dim=1, nominal_models=[nom_model_th, nom_model_om])
         self.assertTrue(len(dynamics.gpr_err) == 2)
 
@@ -87,3 +92,36 @@ class TestDynamics(TestCase):
                                                                curr_state=init_state,
                                                                actions=np.zeros((horizon, action_dim)))
         print(state_means)
+
+    def test_forward_propagate(self):
+        """
+        Test forward propagate algorithm when not using a nominal model.
+        """
+        num_train = 1000
+        dynamics = Dynamics(state_dim=2, action_dim=1, nominal_models=None)
+        dynamics.gpr_err[0].set_sigma_n(0.1)
+        dynamics.gpr_err[1].set_sigma_n(0.1)
+
+        # Generate states encountered in training data
+        state_th = np.random.uniform(low=0, high=np.pi, size=(num_train, 1))
+        state_om = np.random.uniform(low=-2, high=2, size=(num_train, 1))
+        state = np.concatenate((state_th, state_om), axis=1)
+
+        # Generate actions from training data
+        action = np.random.uniform(low=-2, high=2, size=(num_train, 1))
+
+        # Generate next actions from training data
+        next_state_th = true_model_th(state, action)[:, None]
+        next_state_om = true_model_om(state, action)[:, None]
+        next_state = np.concatenate((next_state_th, next_state_om), axis=1)
+
+        dynamics.append_train_data(state, action, next_state)
+
+        horizon = 1
+        init_state = np.array([0., 0.5])
+        # state_means, state_covars = dynamics.forward_propagate(horizon=horizon,
+        #                                                        curr_state=init_state,
+        #                                                        actions=np.zeros((horizon, action_dim)))
+
+        run_str = 'dynamics.forward_propagate(horizon=horizon, curr_state=init_state, actions=np.zeros((horizon, action_dim)))'
+        cProfile.runctx(run_str, globals(), locals())

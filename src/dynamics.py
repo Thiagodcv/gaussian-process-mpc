@@ -78,6 +78,7 @@ class Dynamics(object):
         y_train = self.gpr_err[0].y_train.cpu().detach().numpy()
 
         for t in range(1, horizon + 1):
+            print("Timestep: ", t)
             mean = np.concatenate((state_means[t - 1, :], actions[t - 1, :]))
 
             # Compute covariance matrix
@@ -88,6 +89,7 @@ class Dynamics(object):
             covar = np.concatenate((covar_top, covar_bottom), axis=0)
 
             for s_dim in range(self.state_dim):
+                print("s_dim: ", s_dim)
                 # compute means for each state dimension
                 K = self.gpr_err[s_dim].Kf.cpu().detach().numpy()
                 lambda_mat = np.diag(self.gpr_err[s_dim].get_lambdas())
@@ -99,7 +101,7 @@ class Dynamics(object):
 
             # Find lower diagonal covariances
             for i in range(1, self.state_dim):
-                for j in range(i - 1):
+                for j in range(i):  # i not i-1
                     K_i = self.gpr_err[i].Kf.cpu().detach().numpy()
                     lambda_mat_i = np.diag(self.gpr_err[i].get_lambdas())
 
