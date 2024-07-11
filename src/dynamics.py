@@ -35,7 +35,6 @@ class Dynamics(object):
 
     def append_train_data(self, state, action, next_state):
         """
-        TODO: Write tests
         Updates bundle of GPR models given a state, action, and next state tuple.
 
         Parameters:
@@ -59,7 +58,7 @@ class Dynamics(object):
 
     def forward_propagate(self, horizon, curr_state, actions):
         """
-        TODO: Write tests
+        TODO: nominal models aren't taken into account here. Try to see if this can be remedied.
         Given `horizon` number of actions, compute the expected states and state covariances.
         Note that because this method only takes actions as arguments (and not states), this method
         corresponds to a shooting method.
