@@ -29,3 +29,40 @@ class TestDynamics(TestCase):
         next_state = np.array([next_state_th, next_state_om])
 
         dynamics.append_train_data(state, action, next_state)
+
+        self.assertTrue(np.linalg.norm(dynamics.gpr_err[0].X_train.cpu().detach().numpy() -
+                                       np.array([[1., 0.5, 0.8]])) < 1e-5)
+
+        self.assertTrue(np.linalg.norm(dynamics.gpr_err[1].X_train.cpu().detach().numpy() -
+                                       np.array([[1., 0.5, 0.8]])) < 1e-5)
+
+        self.assertTrue(np.linalg.norm(dynamics.gpr_err[0].y_train.item() - next_state_th) < 1e-5)
+        self.assertTrue(np.linalg.norm(dynamics.gpr_err[1].y_train.item() - next_state_om) < 1e-5)
+
+    def test_append_train_data_batch(self):
+        """
+        Test to see if correct information is stored in each Gaussian process model. This test handles the case
+        of more than one observation.
+        """
+        dynamics = Dynamics(state_dim=2, action_dim=1, nominal_models=[nom_model_th, nom_model_om])
+        self.assertTrue(len(dynamics.gpr_err) == 2)
+
+        state = np.array([[1., 0.5],
+                          [1.5, 1.0]])  # Two observations (each row is an observation)
+        action = np.array([0.8, 1.2])
+        next_state_th = true_model_th(state, action)[:, None]
+        next_state_om = true_model_om(state, action)[:, None]
+        next_state = np.concatenate((next_state_th, next_state_om), axis=1)
+
+        dynamics.append_train_data(state, action, next_state)
+
+        self.assertTrue(np.linalg.norm(dynamics.gpr_err[0].X_train.cpu().detach().numpy() -
+                                       np.array([[1., 0.5, 0.8],
+                                                 [1.5, 1.0, 1.2]])) < 1e-5)
+
+        self.assertTrue(np.linalg.norm(dynamics.gpr_err[1].X_train.cpu().detach().numpy() -
+                                       np.array([[1., 0.5, 0.8],
+                                                 [1.5, 1.0, 1.2]])) < 1e-5)
+
+        self.assertTrue(np.linalg.norm(dynamics.gpr_err[0].y_train.cpu().detach().numpy() - next_state_th) < 1e-5)
+        self.assertTrue(np.linalg.norm(dynamics.gpr_err[1].y_train.cpu().detach().numpy() - next_state_om) < 1e-5)

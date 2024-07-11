@@ -44,10 +44,18 @@ class Dynamics(object):
         action: np.array
         next_state: np.array
         """
-        x = np.concatenate((state, action))
-
-        for i in range(self.state_dim):
-            self.gpr_err[i].append_train_data(x, next_state[i])
+        # If only one observation
+        if len(state.shape) == 1:
+            x = np.concatenate((state, action))
+            for i in range(self.state_dim):
+                self.gpr_err[i].append_train_data(x, next_state[i])
+        # If multiple observations
+        else:
+            if len(action.shape) == 1:
+                action = action[:, None]
+            x = np.concatenate((state, action), axis=1)
+            for i in range(self.state_dim):
+                self.gpr_err[i].append_train_data(x, next_state[:, i])
 
     def forward_propagate(self, horizon, curr_state, actions):
         """
