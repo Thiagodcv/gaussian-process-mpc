@@ -75,41 +75,42 @@ class Dynamics(object):
         state_covars = np.zeros((horizon+1, self.state_dim, self.state_dim))
         state_covars[0, :, :] = 1e-3 * np.identity(self.state_dim)
 
-        X_train = self.gpr_err[0].X_train
-        y_train = self.gpr_err[0].y_train
+        X_train = self.gpr_err[0].X_train.cpu().detach().numpy()
+        y_train = self.gpr_err[0].y_train.cpu().detach().numpy()
 
         for t in range(1, horizon + 1):
-            mean = np.concatenate(state_means[t - 1, :], actions[t - 1, :])
+            mean = np.concatenate((state_means[t - 1, :], actions[t - 1, :]))
 
             # Compute covariance matrix
-            covar_top = np.concatenate((state_covars[t - 1, :, :], np.zeros((self.action_dim, self.action_dim))),
+            covar_top = np.concatenate((state_covars[t - 1, :, :], np.zeros((self.state_dim, self.action_dim))),
                                        axis=1)
-            covar_bottom = np.concatenate((np.zeros((self.action_dim, self.action_dim)),
+            covar_bottom = np.concatenate((np.zeros((self.action_dim, self.state_dim)),
                                            1e-3*np.identity(self.action_dim)), axis=1)
             covar = np.concatenate((covar_top, covar_bottom), axis=0)
 
             for s_dim in range(self.state_dim):
                 # compute means for each state dimension
-                K = self.gpr_err[s_dim].Kf
+                K = self.gpr_err[s_dim].Kf.cpu().detach().numpy()
                 lambda_mat = np.diag(self.gpr_err[s_dim].get_lambdas())
 
-                state_means[t, s_dim] = mean_prop(K, lambda_mat, mean, covar, X_train, y_train)
+                state_means[t, s_dim] = mean_prop(K, lambda_mat, mean, covar, X_train, y_train.squeeze())[0]
 
                 # compute variances for each state dimension
-                state_covars[t, s_dim, s_dim] = variance_prop(K, lambda_mat, mean, covar, X_train, y_train)
+                state_covars[t, s_dim, s_dim] = variance_prop(K, lambda_mat, mean, covar, X_train, y_train.squeeze())
 
             # Find lower diagonal covariances
             for i in range(1, self.state_dim):
                 for j in range(i - 1):
-                    K_i = self.gpr_err[i].Kf
+                    K_i = self.gpr_err[i].Kf.cpu().detach().numpy()
                     lambda_mat_i = np.diag(self.gpr_err[i].get_lambdas())
 
-                    K_j = self.gpr_err[j].Kf
+                    K_j = self.gpr_err[j].Kf.cpu().detach().numpy()
                     lambda_mat_j = np.diag(self.gpr_err[j].get_lambdas())
 
                     # compute covariances between different state dimensions
                     state_covars[t, i, j] = covariance_prop(K_i, K_j,
-                                                            lambda_mat_i, lambda_mat_j, mean, covar, X_train, y_train)
+                                                            lambda_mat_i, lambda_mat_j,
+                                                            mean, covar, X_train, y_train.squeeze())
 
             # Copy values from lower diagonal to upper diagonal
             state_covars[t, :, :] += state_covars[t, :, :].T - np.diag(np.diag(state_covars[t, :, :]))
