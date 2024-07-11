@@ -4,6 +4,7 @@ from unittest import TestCase
 import numpy as np
 import torch
 import cProfile
+import time
 
 
 class TestDynamics(TestCase):
@@ -119,9 +120,11 @@ class TestDynamics(TestCase):
 
         horizon = 1
         init_state = np.array([0., 0.5])
-        # state_means, state_covars = dynamics.forward_propagate(horizon=horizon,
-        #                                                        curr_state=init_state,
-        #                                                        actions=np.zeros((horizon, action_dim)))
-
-        run_str = 'dynamics.forward_propagate(horizon=horizon, curr_state=init_state, actions=np.zeros((horizon, action_dim)))'
-        cProfile.runctx(run_str, globals(), locals())
+        start = time.time()
+        state_means, state_covars = dynamics.forward_propagate(horizon=horizon,
+                                                               curr_state=init_state,
+                                                               actions=np.zeros((horizon, action_dim)))
+        end = time.time()
+        print("time: ", end-start)
+        # run_str = 'dynamics.forward_propagate(horizon=horizon, curr_state=init_state, actions=np.zeros((horizon, action_dim)))'
+        # cProfile.runctx(run_str, globals(), locals())

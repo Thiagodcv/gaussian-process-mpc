@@ -1,5 +1,7 @@
 import numpy as np
 import scipy
+import numba
+import warnings
 
 
 def mean_prop(K, Lambda, u, S, X_train, y_train):
@@ -30,7 +32,11 @@ def mean_prop(K, Lambda, u, S, X_train, y_train):
     dict
         Dictionary containing beta and l (equation 31)
     """
-    beta = scipy.linalg.solve(K, y_train)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        beta = scipy.linalg.solve(K, y_train, assume_a='pos')
+        assert np.linalg.norm(K @ beta - y_train) < 1e-5
+    # beta = np.linalg.inv(K) @ y_train
     Lambda_inv = np.linalg.inv(Lambda)
     S_Lambda_inv = np.linalg.inv(S + Lambda)
     l = np.zeros(beta.shape[0])
