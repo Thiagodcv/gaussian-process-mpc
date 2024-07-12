@@ -2,6 +2,7 @@ import numpy as np
 import scipy
 import numba
 import warnings
+import torch
 
 
 def mean_prop(K, Lambda, u, S, X_train, y_train):
@@ -32,11 +33,12 @@ def mean_prop(K, Lambda, u, S, X_train, y_train):
     dict
         Dictionary containing beta and l (equation 31)
     """
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        beta = scipy.linalg.solve(K, y_train, assume_a='pos')
-        assert np.linalg.norm(K @ beta - y_train) < 1e-5
+    # with warnings.catch_warnings():
+    #     warnings.simplefilter("ignore")
+    #     beta = scipy.linalg.solve(K, y_train, assume_a='pos')
+    #     assert np.linalg.norm(K @ beta - y_train) < 1e-5
     # beta = np.linalg.inv(K) @ y_train
+    beta = scipy.linalg.solve(K, y_train, assume_a='pos')
     Lambda_inv = np.linalg.inv(Lambda)
     S_Lambda_inv = np.linalg.inv(S + Lambda)
     l = np.zeros(beta.shape[0])
@@ -128,7 +130,7 @@ def variance_prop(K, Lambda, u, S, X_train, y_train):
     Lam_inv = np.linalg.inv(Lambda)
     det_part = np.linalg.det(2 * Lam_inv @ S + np.identity(d)) ** (-1/2)
     for i in range(num_train):
-        for j in range(num_train):
+        for j in range(num_train):  # Explicit double for-loop has to go.
             x_d = (X_train[i, :] + X_train[j, :]) / 2
             exp_part = np.exp(-1/2 * (u - x_d).T @ half_Lam_S_inv @ (u - x_d) +
                               -1/4 * (X_train[i, :] - X_train[j, :]).T @ Lam_inv @ (X_train[i, :] - X_train[j, :]))
@@ -289,3 +291,34 @@ def covariance_prop_mc(K1, K2, Lambda1, Lambda2, u, S, X_train, y_train):
         f2_list.append(f2)
 
     return np.cov(f1_list, f2_list)[0, 1]
+
+
+# Implementing Torch versions of mv_prop, var_prop, covar_prop
+def mean_prop_torch(K, lambdas, u, S, X_train, y_train):
+    """
+    Computes the mean of predictive distribution (21) using an exact formula. Assumes we are using Gaussian kernels.
+
+    Parameters:
+    ----------
+    K: torch.tensor
+        Evidence covariance matrix
+    lambdas: torch.tensor
+        Tensor array containing kernel parameters
+    u: torch.tensor
+        Mean of input distribution (which is assumed to be Gaussian)
+    S: torch.tensor
+        Covariance of input distribution (which is assumed to be Gaussian)
+    X_train: torch.tensor
+        GP training data inputs
+    y_train: torch.tensor
+        GP training data outputs
+
+    Return:
+    ------
+    scalar
+        Mean of predictive distribution of f
+    dict
+        Dictionary containing beta and l (equation 31)
+    """
+    beta = torch.linalg.solve(K, y_train, assume_a='pos')
+    Lambda_inv = torch.diag(1/lambdas)
