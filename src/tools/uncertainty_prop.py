@@ -33,11 +33,6 @@ def mean_prop(K, Lambda, u, S, X_train, y_train):
     dict
         Dictionary containing beta and l (equation 31)
     """
-    # with warnings.catch_warnings():
-    #     warnings.simplefilter("ignore")
-    #     beta = scipy.linalg.solve(K, y_train, assume_a='pos')
-    #     assert np.linalg.norm(K @ beta - y_train) < 1e-5
-    # beta = np.linalg.inv(K) @ y_train
     beta = scipy.linalg.solve(K, y_train, assume_a='pos')
     Lambda_inv = np.linalg.inv(Lambda)
     S_Lambda_inv = np.linalg.inv(S + Lambda)
@@ -294,14 +289,14 @@ def covariance_prop_mc(K1, K2, Lambda1, Lambda2, u, S, X_train, y_train):
 
 
 # Implementing Torch versions of mv_prop, var_prop, covar_prop
-def mean_prop_torch(K, lambdas, u, S, X_train, y_train):
+def mean_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train):
     """
     Computes the mean of predictive distribution (21) using an exact formula. Assumes we are using Gaussian kernels.
 
     Parameters:
     ----------
-    K: torch.tensor
-        Evidence covariance matrix
+    Ky_inv: torch.tensor
+        Inverse of evidence covariance matrix
     lambdas: torch.tensor
         Tensor array containing kernel parameters
     u: torch.tensor
@@ -320,5 +315,12 @@ def mean_prop_torch(K, lambdas, u, S, X_train, y_train):
     dict
         Dictionary containing beta and l (equation 31)
     """
-    beta = torch.linalg.solve(K, y_train, assume_a='pos')
+    beta = Ky_inv @ y_train
+    Lambda = torch.diag(lambdas)
     Lambda_inv = torch.diag(1/lambdas)
+    S_Lambda_inv = torch.linalg.inv(S + Lambda)
+    d = S.shape[0]
+
+    gauss_cov = torch.sum(((u - X_train) @ S_Lambda_inv) * (u - X_train), dim=1)
+    l = (torch.linalg.det(Lambda_inv @ S + torch.eye(d, device=beta.device)) ** (-1/2)) * torch.exp(-1/2 * gauss_cov)
+    return torch.dot(beta, l), {'beta': beta, 'l': l}
