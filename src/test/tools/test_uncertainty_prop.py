@@ -220,6 +220,8 @@ class TestUncertaintyProp(TestCase):
         self.assertTrue(np.linalg.norm(Ky - Ky.T) < 1e-5)
         self.assertEqual(K.shape, (num_train, num_train))
 
+        np_mu, np_dict = mean_prop(Ky, np.diag(lambdas), u, S, X_train, y_train)
+
         # Convert tensors to torch
         X_train = torch.tensor(X_train, device=device)
         y_train = torch.tensor(y_train, device=device)
@@ -228,6 +230,8 @@ class TestUncertaintyProp(TestCase):
         S = torch.tensor(S, device=device)
         Ky = torch.tensor(Ky, device=device)
         Ky_inv = torch.linalg.inv(Ky)
-        mu, _ = mean_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train)
-        print(mu)
-        print(mu.shape)
+        torch_mu, torch_dict = mean_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train)
+
+        self.assertTrue(np.abs(np_mu - torch_mu) < 1e-7)
+        self.assertTrue(np.linalg.norm(np_dict['beta'] - torch_dict['beta'].cpu().detach().numpy()) < 1e-5)
+        self.assertTrue(np.linalg.norm(np_dict['l'] - torch_dict['l'].cpu().detach().numpy()) < 1e-5)

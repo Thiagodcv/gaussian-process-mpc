@@ -323,4 +323,4 @@ def mean_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train):
 
     gauss_cov = torch.sum(((u - X_train) @ S_Lambda_inv) * (u - X_train), dim=1)
     l = (torch.linalg.det(Lambda_inv @ S + torch.eye(d, device=beta.device)) ** (-1/2)) * torch.exp(-1/2 * gauss_cov)
-    return torch.dot(beta, l), {'beta': beta, 'l': l}
+    return torch.dot(beta, l).item(), {'beta': beta, 'l': l}
