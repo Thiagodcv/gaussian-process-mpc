@@ -326,7 +326,7 @@ def mean_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train):
     return torch.dot(beta, l).item(), {'beta': beta, 'l': l}
 
 
-def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train, pred_mean, beta):
+def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train, mean, beta):
     """
     Computes the variance of predictive distribution (21) using an exact formula.
     Assumes we are using Gaussian kernels.
@@ -345,7 +345,7 @@ def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train, pred_mean, beta
         GP training data inputs
     y_train: torch.tensor
         GP training data outputs
-    pred_mean: scalar
+    mean: scalar
         mean of predictive distribution of GP with uncertain input (equation 21)
     beta: torch.tensor
         vector used in dot-product to compute mean in (21)
@@ -355,6 +355,34 @@ def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train, pred_mean, beta
     scalar
        Variance of predictive distribution of f
     """
+    num_train = X_train.shape[0]
+    d = S.shape[0]
+    Lambda = torch.diag(lambdas)
+    Lam_inv = torch.diag(1/lambdas)
+    half_Lam_S_inv = torch.linalg.inv(Lambda / 2 + S)
+    det_part = torch.linalg.det(2 * Lam_inv @ S + torch.eye(d, device=X_train.device)) ** (-1/2)
+
+    # Compute A_part
+    u_A_Xi = (u @ half_Lam_S_inv @ X_train.mT)[:, None]
+    u_A_Xj = u_A_Xi.mT
+
+    u_Xij_diff = u @ half_Lam_S_inv @ u + X_train @ half_Lam_S_inv @ X_train.mT + u_A_Xi + u_A_Xj
+
+    u_Xi_diff = torch.diag(u_Xij_diff)[:, None]
+    u_Xj_diff = u_Xi_diff.mT
+
+    A_part = torch.exp((-1/8) * (u_Xi_diff + 2*u_Xij_diff + u_Xj_diff))
+
+    # Compute Lambda_part
+    X_train_mod = X_train * torch.sqrt(1 / lambdas)
+    dist_mat = torch.cdist(X_train_mod, X_train_mod, p=2)
+    Lambda_part = torch.exp((-1/4) * torch.square(dist_mat))
+
+    # Compute entire L matrix
+    L = det_part * A_part * Lambda_part
+
+    return 1 - torch.trace((Ky_inv - torch.outer(beta, beta)) @ L) - mean**2
+
     # mean, params = mean_prop(K, Lambda, u, S, X_train, y_train)
     # beta = params['beta']
     # l = params['l']
@@ -375,5 +403,3 @@ def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train, pred_mean, beta
     #
     # K_inv = np.linalg.inv(K)
     # return 1 - np.trace((K_inv - np.outer(beta, beta)) @ L) - mean**2
-
-    pass
