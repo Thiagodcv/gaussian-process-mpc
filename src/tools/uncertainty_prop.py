@@ -324,3 +324,56 @@ def mean_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train):
     gauss_cov = torch.sum(((u - X_train) @ S_Lambda_inv) * (u - X_train), dim=1)
     l = (torch.linalg.det(Lambda_inv @ S + torch.eye(d, device=beta.device)) ** (-1/2)) * torch.exp(-1/2 * gauss_cov)
     return torch.dot(beta, l).item(), {'beta': beta, 'l': l}
+
+
+def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train, pred_mean, beta):
+    """
+    Computes the variance of predictive distribution (21) using an exact formula.
+    Assumes we are using Gaussian kernels.
+
+    Parameters:
+    ----------
+    Ky_inv: torch.tensor
+        Inverse of evidence covariance matrix
+    lambdas: torch.tensor
+        Tensor array containing kernel parameters
+    u: torch.tensor
+        Mean of input distribution (which is assumed to be Gaussian)
+    S: torch.tensor
+        Covariance of input distribution (which is assumed to be Gaussian)
+    X_train: torch.tensor
+        GP training data inputs
+    y_train: torch.tensor
+        GP training data outputs
+    pred_mean: scalar
+        mean of predictive distribution of GP with uncertain input (equation 21)
+    beta: torch.tensor
+        vector used in dot-product to compute mean in (21)
+
+    Return:
+    ------
+    scalar
+       Variance of predictive distribution of f
+    """
+    # mean, params = mean_prop(K, Lambda, u, S, X_train, y_train)
+    # beta = params['beta']
+    # l = params['l']
+    #
+    # num_train = X_train.shape[0]
+    # d = S.shape[0]
+    # L = np.zeros((num_train, num_train))
+    # half_Lam_S_inv = np.linalg.inv(Lambda / 2 + S)
+    # Lam_inv = np.linalg.inv(Lambda)
+    # det_part = np.linalg.det(2 * Lam_inv @ S + np.identity(d)) ** (-1/2)
+    # for i in range(num_train):
+    #     for j in range(num_train):  # Explicit double for-loop has to go.
+    #         x_d = (X_train[i, :] + X_train[j, :]) / 2
+    #         exp_part = np.exp(-1/2 * (u - x_d).T @ half_Lam_S_inv @ (u - x_d) +
+    #                           -1/4 * (X_train[i, :] - X_train[j, :]).T @ Lam_inv @ (X_train[i, :] - X_train[j, :]))
+    #
+    #         L[i, j] = det_part * exp_part
+    #
+    # K_inv = np.linalg.inv(K)
+    # return 1 - np.trace((K_inv - np.outer(beta, beta)) @ L) - mean**2
+
+    pass
