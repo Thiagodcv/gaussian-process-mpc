@@ -383,3 +383,68 @@ def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, mean, beta):
     L = det_part * A_part * Lambda_part
 
     return 1 - torch.trace((Ky_inv - torch.outer(beta, beta)) @ L) - mean**2
+
+
+def covariance_prop_torch(K1, K2, lambdas1, lambdas2, u, S, X_train, y_train, mean1, mean2, beta1, beta2):
+    """
+    Computes the covariance of GP outputs (A14) using an exact formula.
+    Assumes we are using Gaussian kernels for both GP models 1 and 2.
+
+    Parameters:
+    ----------
+    K1 & K2: torch.tensor
+       Evidence covariance matrix for GP models 1 and 2
+    Lambda1 & Lambda2: torch.tensor
+       tensor containing kernel parameters for GP models 1 and 2
+    u: torch.tensor
+       Mean of input distribution (which is assumed to be Gaussian)
+    S: torch.tensor
+       Covariance of input distribution (which is assumed to be Gaussian)
+    X_train: torch.tensor
+       GP training data inputs
+    y_train: torch.tensor
+       GP training data outputs
+    mean1 & mean2: torch.tensor
+        mean of predictive distribution of GP with uncertain input (equation 21)
+    beta1 & beta2: torch.tensor
+        vector used in dot-product to compute mean in (21)
+
+    Return :
+    ------
+    scalar
+       Covariance of joint predictive distribution of f1 and f2
+    """
+    Lambda1_inv = torch.diag(1/lambdas1)
+    Lambda2_inv = torch.diag(1/lambdas2)
+
+    num_train = beta1.shape[0]
+    d = Lambda1_inv.shape[0]
+
+    det_part = torch.linalg.det(S @ (Lambda1_inv + Lambda2_inv) + torch.eye(d, device=beta1.device)) ** (-1 / 2)
+    
+    # mean1, params1 = mean_prop(K1, Lambda1, u, S, X_train, y_train)
+    # beta1 = params1['beta']
+    #
+    # mean2, params2 = mean_prop(K2, Lambda2, u, S, X_train, y_train)
+    # beta2 = params2['beta']
+    #
+    # Lambda1_inv = np.linalg.inv(Lambda1)
+    # Lambda2_inv = np.linalg.inv(Lambda2)
+    #
+    # def gauss_kern(x1, x2, Lambda_inv):
+    #     return np.exp(-1 / 2 * (x1 - x2).T @ Lambda_inv @ (x1 - x2))
+    #
+    # num_train = beta1.shape[0]
+    # d = Lambda1.shape[0]
+    # Q_tilde = np.zeros((num_train, num_train))
+    # det_part = np.linalg.det(S @ (Lambda1_inv + Lambda2_inv) + np.identity(d)) ** (-1 / 2)
+    # for i in range(num_train):
+    #     for j in range(num_train):
+    #         k1 = gauss_kern(X_train[i, :], u, Lambda1_inv)
+    #         k2 = gauss_kern(X_train[j, :], u, Lambda2_inv)
+    #         z = Lambda1_inv @ (X_train[i, :] - u) + Lambda2_inv @ (X_train[j, :] - u)
+    #         exp_part = np.exp(1 / 2 * z.T @ np.linalg.inv(S @ (Lambda1_inv + Lambda2_inv) + np.identity(d)) @ S @ z)
+    #         Q_tilde[i, j] = k1 * k2 * det_part * exp_part
+    #
+    # return beta1.T @ Q_tilde @ beta2 - mean1 * mean2
+    pass
