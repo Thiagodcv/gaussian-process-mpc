@@ -328,6 +328,7 @@ def mean_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train):
 
 def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, mean, beta):
     """
+    TODO: Decide to keep return value as scalar or tensor
     Computes the variance of predictive distribution (21) using an exact formula.
     Assumes we are using Gaussian kernels.
 
@@ -387,6 +388,7 @@ def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, mean, beta):
 
 def covariance_prop_torch(K1, K2, lambdas1, lambdas2, u, S, X_train, y_train, mean1, mean2, beta1, beta2):
     """
+    TODO: Decide to keep return value as scalar or tensor
     Computes the covariance of GP outputs (A14) using an exact formula.
     Assumes we are using Gaussian kernels for both GP models 1 and 2.
 
@@ -424,9 +426,31 @@ def covariance_prop_torch(K1, K2, lambdas1, lambdas2, u, S, X_train, y_train, me
 
     z1 = Lambda1_inv @ (X_train - u).mT
     z2 = Lambda2_inv @ (X_train - u).mT
+    A_mat = torch.linalg.inv(S @ (Lambda1_inv + Lambda2_inv) + torch.eye(d, device=beta1.device)) @ S
+    # exp_part = torch.exp((1/2)*(z1.mT @ A_mat @ z1 + 2 * z2.mT @ A_mat @ z1 + z2.mT @ A_mat @ z2))
+    A_z1 = torch.sum((A_mat @ z1) * z1, dim=0)[:, None]
+    A_z2 = torch.sum((A_mat @ z2) * z2, dim=0)[:, None]
+    exp_part = torch.exp((1 / 2) * (A_z1 + 2 * z2.mT @ A_mat @ z1 + A_z2.mT))
+
+    # Just for testing purposes
     z_mat = z1[:, :, None] + z2[:, None, :]
-    assert np.linalg.norm((z_mat[:, 5, 6] - (Lambda1_inv @ (X_train[5, :] - u) + Lambda2_inv @ (X_train[6, :] - u)))
-                          .cpu().detach().numpy()) < 1e-5
+    assert torch.linalg.norm(exp_part[5, 6] - torch.exp((1/2) * z_mat[:, 5, 6] @ A_mat @ z_mat[:, 5, 6])).item() < 1e-5
+
+    X_train_mod1 = X_train * torch.sqrt(1 / lambdas1)
+    u_mod1 = u * torch.sqrt(1 / lambdas1)
+    dist_mat1 = torch.cdist(X_train_mod1, u_mod1[None, :], p=2)
+    k1 = torch.square(dist_mat1)
+
+    X_train_mod2 = X_train * torch.sqrt(1 / lambdas2)
+    u_mod2 = u * torch.sqrt(1 / lambdas2)
+    dist_mat2 = torch.cdist(X_train_mod2, u_mod2[None, :], p=2)
+    k2 = torch.square(dist_mat2)
+
+    cov_part = torch.exp((-1/2)*(k1 + k2.mT))
+    Q_tilde = det_part * cov_part * exp_part
+
+    return beta1 @ Q_tilde @ beta2 - mean1 * mean2
+
     # mean1, params1 = mean_prop(K1, Lambda1, u, S, X_train, y_train)
     # beta1 = params1['beta']
     #

@@ -307,7 +307,7 @@ class TestUncertaintyProp(TestCase):
 
     def test_covariance_prop_torch(self):
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        num_train = 100
+        num_train = 200
 
         # Generate noise
         sigma = 0.5
@@ -355,7 +355,9 @@ class TestUncertaintyProp(TestCase):
         self.assertTrue(np.linalg.norm(K2 - K2.T) < 1e-5)
         self.assertEqual(K2.shape, (num_train, num_train))
 
+        np_start = time.time()
         np_covar = covariance_prop(Ky1, Ky2, np.diag(lambdas1), np.diag(lambdas2), u, S, X_train, y_train)
+        np_end = time.time()
 
         # Convert tensors to torch
         X_train = torch.tensor(X_train, device=device)
@@ -371,5 +373,14 @@ class TestUncertaintyProp(TestCase):
         torch_mu1, torch_dict1 = mean_prop_torch(Ky1_inv, lambdas1, u, S, X_train, y_train)
         torch_mu2, torch_dict2 = mean_prop_torch(Ky2_inv, lambdas2, u, S, X_train, y_train)
 
+        torch_start = time.time()
         torch_covar = covariance_prop_torch(Ky1, Ky2, lambdas1, lambdas2, u, S, X_train, y_train,
                                             torch_mu1, torch_mu2, torch_dict1['beta'], torch_dict2['beta'])
+        torch_end = time.time()
+
+        print("NumPy version time: ", np_end - np_start)
+        print("Torch version time: ", torch_end - torch_start)
+        self.assertTrue(np.abs(np_covar - torch_covar.item()) < 1e-5)
+
+        print(np_covar)
+        print(torch_covar.item())
