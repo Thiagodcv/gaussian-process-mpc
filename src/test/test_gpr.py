@@ -485,6 +485,75 @@ class TestGaussianProcessRegression(TestCase):
 
         print("Time to recompute from scratch: ", np.mean(scratch_list))
 
+    def test_matrix_inverse_strategies(self):
+        """
+        Test differences between torch.linalg.solve, torch.linalg.inv, torch.linalg.lu_solve.
+        lu_solve isn't necessarily better -- and the quality of inverse depends on whether you're doing
+        a left-multiply or a right-multiply with the inverse matrix (this problem doesn't exist for linalg.solve
+        and linalg.inv). torch.linalg.solve and torch.linalg.inv give the exact same result if you just want
+        to invert a matrix ignoring matrix multiplies.
+        """
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        num_train = 1000
+        lambdas = torch.tensor([1.], device=device)
+        sigma_f = torch.tensor(1., device=device)
+
+        X_train = torch.normal(mean=0., std=1., size=(num_train, 1), device=device)
+
+        X_train_mod = X_train * torch.sqrt(1 / lambdas)
+        dist_mat = torch.cdist(X_train_mod, X_train_mod, p=2)
+        Kf = (sigma_f ** 2) * torch.exp(-1 / 2 * torch.square(dist_mat))
+        # print(Kf)
+
+        Kf_inv = torch.linalg.inv(Kf)
+        Kf_solve_inv = torch.linalg.solve(Kf, torch.eye(num_train, device=device))
+
+        inv_norm_left = torch.linalg.norm(Kf_inv @ Kf - torch.eye(num_train, device=device))
+        solve_norm_left = torch.linalg.norm(Kf_solve_inv @ Kf - torch.eye(num_train, device=device))
+        print("inv_norm_left: ", inv_norm_left.item())
+        print("solve_norm_left: ", solve_norm_left.item())
+
+        inv_norm_right = torch.linalg.norm(Kf @ Kf_inv - torch.eye(num_train, device=device))
+        solve_norm_right = torch.linalg.norm(Kf @ Kf_solve_inv - torch.eye(num_train, device=device))
+        print("inv_norm_right: ", inv_norm_right.item())
+        print("solve_norm_right: ", solve_norm_right.item())
+
+        diff_norm = torch.linalg.norm(Kf_inv - Kf_solve_inv)
+        print("diff_norm: ", diff_norm.item())
+
+        # linalg.inv and linalg.solve produce the exact same inverse
+        LU, pivots = torch.linalg.lu_factor(Kf)
+        Kf_LU_inv = torch.linalg.lu_solve(LU, pivots, torch.eye(num_train, device=device))
+        lu_norm_right = torch.linalg.norm(Kf @ Kf_LU_inv - torch.eye(num_train, device=device))
+        lu_norm_left = torch.linalg.norm(Kf_LU_inv @ Kf - torch.eye(num_train, device=device))
+        print("lu_norm_right: ", lu_norm_right.item())
+        print("lu_norm_left: ", lu_norm_left.item())
+
+    def test_Ky_inverse_vs_Kf_inverse(self):
+        """
+        Test if adding sigma_n**2 * I to Kf improves condition number and inverse quality.
+        RESULT: Ky is much better conditioned than Kf, so forward propagation algorithms should be fine.
+        Even in GPR the only thing inverted is Ky, so we're safe!
+        """
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        num_train = 1000
+        lambdas = torch.tensor([1.], device=device)
+        sigma_f = torch.tensor(1., device=device)
+        sigma_n = torch.tensor(0.5, device=device)
+
+        X_train = torch.normal(mean=0., std=1., size=(num_train, 1), device=device)
+
+        X_train_mod = X_train * torch.sqrt(1 / lambdas)
+        dist_mat = torch.cdist(X_train_mod, X_train_mod, p=2)
+        Kf = (sigma_f ** 2) * torch.exp(-1 / 2 * torch.square(dist_mat))
+        Ky = Kf + (sigma_n ** 2) * torch.eye(num_train, device=device)
+
+        print("Kf cond: ", torch.linalg.cond(Kf))
+        print("Ky cond: ", torch.linalg.cond(Ky))
+
+        print("Kf inverse error: ", torch.linalg.norm(Kf @ torch.linalg.inv(Kf) - torch.eye(num_train, device=device)))
+        print("Ky inverse error: ", torch.linalg.norm(Ky @ torch.linalg.inv(Ky) - torch.eye(num_train, device=device)))
+
     # FUNCTIONS THAT ACTUALLY TEST GPR CLASS DIRECTLY
     # -----------------------------------------------
 
