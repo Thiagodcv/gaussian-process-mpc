@@ -420,8 +420,13 @@ def covariance_prop_torch(K1, K2, lambdas1, lambdas2, u, S, X_train, y_train, me
     num_train = beta1.shape[0]
     d = Lambda1_inv.shape[0]
 
-    det_part = torch.linalg.det(S @ (Lambda1_inv + Lambda2_inv) + torch.eye(d, device=beta1.device)) ** (-1 / 2)
-    
+    det_part = torch.linalg.det(S @ (Lambda1_inv + Lambda2_inv) + torch.eye(d, device=beta1.device))**(-1/2)
+
+    z1 = Lambda1_inv @ (X_train - u).mT
+    z2 = Lambda2_inv @ (X_train - u).mT
+    z_mat = z1[:, :, None] + z2[:, None, :]
+    assert np.linalg.norm((z_mat[:, 5, 6] - (Lambda1_inv @ (X_train[5, :] - u) + Lambda2_inv @ (X_train[6, :] - u)))
+                          .cpu().detach().numpy()) < 1e-5
     # mean1, params1 = mean_prop(K1, Lambda1, u, S, X_train, y_train)
     # beta1 = params1['beta']
     #
@@ -447,4 +452,3 @@ def covariance_prop_torch(K1, K2, lambdas1, lambdas2, u, S, X_train, y_train, me
     #         Q_tilde[i, j] = k1 * k2 * det_part * exp_part
     #
     # return beta1.T @ Q_tilde @ beta2 - mean1 * mean2
-    pass
