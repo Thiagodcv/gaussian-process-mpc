@@ -328,7 +328,6 @@ def mean_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train):
 
 def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, mean, beta):
     """
-    TODO: Decide to keep return value as scalar or tensor
     Computes the variance of predictive distribution (21) using an exact formula.
     Assumes we are using Gaussian kernels.
 
@@ -383,12 +382,11 @@ def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, mean, beta):
     # Compute entire L matrix
     L = det_part * A_part * Lambda_part
 
-    return 1 - torch.trace((Ky_inv - torch.outer(beta, beta)) @ L) - mean**2
+    return (1 - torch.trace((Ky_inv - torch.outer(beta, beta)) @ L) - mean**2).item()
 
 
-def covariance_prop_torch(K1, K2, lambdas1, lambdas2, u, S, X_train, y_train, mean1, mean2, beta1, beta2):
+def covariance_prop_torch(lambdas1, lambdas2, u, S, X_train, mean1, mean2, beta1, beta2):
     """
-    TODO: Decide to keep return value as scalar or tensor
     Computes the covariance of GP outputs (A14) using an exact formula.
     Assumes we are using Gaussian kernels for both GP models 1 and 2.
 
@@ -427,14 +425,13 @@ def covariance_prop_torch(K1, K2, lambdas1, lambdas2, u, S, X_train, y_train, me
     z1 = Lambda1_inv @ (X_train - u).mT
     z2 = Lambda2_inv @ (X_train - u).mT
     A_mat = torch.linalg.inv(S @ (Lambda1_inv + Lambda2_inv) + torch.eye(d, device=beta1.device)) @ S
-    # exp_part = torch.exp((1/2)*(z1.mT @ A_mat @ z1 + 2 * z2.mT @ A_mat @ z1 + z2.mT @ A_mat @ z2))
     A_z1 = torch.sum((A_mat @ z1) * z1, dim=0)[:, None]
     A_z2 = torch.sum((A_mat @ z2) * z2, dim=0)[:, None]
     exp_part = torch.exp((1 / 2) * (A_z1 + 2 * z2.mT @ A_mat @ z1 + A_z2.mT))
 
     # Just for testing purposes
-    z_mat = z1[:, :, None] + z2[:, None, :]
-    assert torch.linalg.norm(exp_part[5, 6] - torch.exp((1/2) * z_mat[:, 5, 6] @ A_mat @ z_mat[:, 5, 6])).item() < 1e-5
+    # z_mat = z1[:, :, None] + z2[:, None, :]
+    # assert torch.linalg.norm(exp_part[5, 6] - torch.exp((1/2) * z_mat[:, 5, 6] @ A_mat @ z_mat[:, 5, 6])).item() < 1e-5
 
     X_train_mod1 = X_train * torch.sqrt(1 / lambdas1)
     u_mod1 = u * torch.sqrt(1 / lambdas1)
@@ -449,30 +446,4 @@ def covariance_prop_torch(K1, K2, lambdas1, lambdas2, u, S, X_train, y_train, me
     cov_part = torch.exp((-1/2)*(k1 + k2.mT))
     Q_tilde = det_part * cov_part * exp_part
 
-    return beta1 @ Q_tilde @ beta2 - mean1 * mean2
-
-    # mean1, params1 = mean_prop(K1, Lambda1, u, S, X_train, y_train)
-    # beta1 = params1['beta']
-    #
-    # mean2, params2 = mean_prop(K2, Lambda2, u, S, X_train, y_train)
-    # beta2 = params2['beta']
-    #
-    # Lambda1_inv = np.linalg.inv(Lambda1)
-    # Lambda2_inv = np.linalg.inv(Lambda2)
-    #
-    # def gauss_kern(x1, x2, Lambda_inv):
-    #     return np.exp(-1 / 2 * (x1 - x2).T @ Lambda_inv @ (x1 - x2))
-    #
-    # num_train = beta1.shape[0]
-    # d = Lambda1.shape[0]
-    # Q_tilde = np.zeros((num_train, num_train))
-    # det_part = np.linalg.det(S @ (Lambda1_inv + Lambda2_inv) + np.identity(d)) ** (-1 / 2)
-    # for i in range(num_train):
-    #     for j in range(num_train):
-    #         k1 = gauss_kern(X_train[i, :], u, Lambda1_inv)
-    #         k2 = gauss_kern(X_train[j, :], u, Lambda2_inv)
-    #         z = Lambda1_inv @ (X_train[i, :] - u) + Lambda2_inv @ (X_train[j, :] - u)
-    #         exp_part = np.exp(1 / 2 * z.T @ np.linalg.inv(S @ (Lambda1_inv + Lambda2_inv) + np.identity(d)) @ S @ z)
-    #         Q_tilde[i, j] = k1 * k2 * det_part * exp_part
-    #
-    # return beta1.T @ Q_tilde @ beta2 - mean1 * mean2
+    return (beta1 @ Q_tilde @ beta2 - mean1 * mean2).item()

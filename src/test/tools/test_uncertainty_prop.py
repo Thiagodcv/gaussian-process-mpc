@@ -299,11 +299,11 @@ class TestUncertaintyProp(TestCase):
         torch_var = variance_prop_torch(Ky_inv, lambdas, u, S, X_train, mean=torch_mu, beta=torch_dict['beta'])
         torch_end = time.time()
 
-        self.assertTrue(np.abs(np_var - torch_var.item()) < 1e-5)
+        self.assertTrue(np.abs(np_var - torch_var) < 1e-5)
         print("NumPy version time: ", end-start)
         print("Torch version time: ", torch_end-torch_start)
         print(np_var)
-        print(torch_var.item())
+        print(torch_var)
 
     def test_covariance_prop_torch(self):
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -374,13 +374,13 @@ class TestUncertaintyProp(TestCase):
         torch_mu2, torch_dict2 = mean_prop_torch(Ky2_inv, lambdas2, u, S, X_train, y_train)
 
         torch_start = time.time()
-        torch_covar = covariance_prop_torch(Ky1, Ky2, lambdas1, lambdas2, u, S, X_train, y_train,
+        torch_covar = covariance_prop_torch(lambdas1, lambdas2, u, S, X_train,
                                             torch_mu1, torch_mu2, torch_dict1['beta'], torch_dict2['beta'])
         torch_end = time.time()
 
         print("NumPy version time: ", np_end - np_start)
         print("Torch version time: ", torch_end - torch_start)
-        self.assertTrue(np.abs(np_covar - torch_covar.item()) < 1e-5)
+        self.assertTrue(np.abs(np_covar - torch_covar) < 1e-5)
 
         print(np_covar)
-        print(torch_covar.item())
+        print(torch_covar)
