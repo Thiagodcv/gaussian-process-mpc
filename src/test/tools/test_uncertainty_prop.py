@@ -6,6 +6,7 @@ from src.tools.uncertainty_prop import (mean_prop, mean_prop_mc,
                                         variance_prop, variance_prop_mc,
                                         covariance_prop, covariance_prop_mc,
                                         mean_prop_torch, variance_prop_torch)
+import time
 
 
 class TestUncertaintyProp(TestCase):
@@ -279,7 +280,9 @@ class TestUncertaintyProp(TestCase):
         self.assertTrue(np.linalg.norm(Ky - Ky.T) < 1e-5)
         self.assertEqual(Ky.shape, (num_train, num_train))
 
+        start = time.time()
         np_var = variance_prop(Ky, Lambda, u, S, X_train, y_train)
+        end = time.time()
 
         # Convert tensors to torch
         X_train = torch.tensor(X_train, device=device)
@@ -291,8 +294,12 @@ class TestUncertaintyProp(TestCase):
         Ky_inv = torch.linalg.inv(Ky)
         torch_mu, torch_dict = mean_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train)
 
-        torch_var = variance_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train,
-                                        mean=torch_mu, beta=torch_dict['beta'])
+        torch_start = time.time()
+        torch_var = variance_prop_torch(Ky_inv, lambdas, u, S, X_train, mean=torch_mu, beta=torch_dict['beta'])
+        torch_end = time.time()
 
+        self.assertTrue(np.abs(np_var - torch_var.item()) < 1e-5)
+        print("NumPy version time: ", end-start)
+        print("Torch version time: ", torch_end-torch_start)
         print(np_var)
         print(torch_var.item())

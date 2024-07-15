@@ -326,7 +326,7 @@ def mean_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train):
     return torch.dot(beta, l).item(), {'beta': beta, 'l': l}
 
 
-def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train, mean, beta):
+def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, mean, beta):
     """
     Computes the variance of predictive distribution (21) using an exact formula.
     Assumes we are using Gaussian kernels.
@@ -366,7 +366,8 @@ def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train, mean, beta):
     u_A_Xi = (u @ half_Lam_S_inv @ X_train.mT)[:, None]
     u_A_Xj = u_A_Xi.mT
 
-    u_Xij_diff = u @ half_Lam_S_inv @ u + X_train @ half_Lam_S_inv @ X_train.mT + u_A_Xi + u_A_Xj
+    u_Xij_diff = u @ half_Lam_S_inv @ u + X_train @ half_Lam_S_inv @ X_train.mT - u_A_Xi - u_A_Xj
+    # assert np.abs((u_Xij_diff[3, 5] - (u - X_train[3, :]) @ half_Lam_S_inv @ (u - X_train[5, :])).item()) < 1e-5
 
     u_Xi_diff = torch.diag(u_Xij_diff)[:, None]
     u_Xj_diff = u_Xi_diff.mT
@@ -382,24 +383,3 @@ def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train, mean, beta):
     L = det_part * A_part * Lambda_part
 
     return 1 - torch.trace((Ky_inv - torch.outer(beta, beta)) @ L) - mean**2
-
-    # mean, params = mean_prop(K, Lambda, u, S, X_train, y_train)
-    # beta = params['beta']
-    # l = params['l']
-    #
-    # num_train = X_train.shape[0]
-    # d = S.shape[0]
-    # L = np.zeros((num_train, num_train))
-    # half_Lam_S_inv = np.linalg.inv(Lambda / 2 + S)
-    # Lam_inv = np.linalg.inv(Lambda)
-    # det_part = np.linalg.det(2 * Lam_inv @ S + np.identity(d)) ** (-1/2)
-    # for i in range(num_train):
-    #     for j in range(num_train):  # Explicit double for-loop has to go.
-    #         x_d = (X_train[i, :] + X_train[j, :]) / 2
-    #         exp_part = np.exp(-1/2 * (u - x_d).T @ half_Lam_S_inv @ (u - x_d) +
-    #                           -1/4 * (X_train[i, :] - X_train[j, :]).T @ Lam_inv @ (X_train[i, :] - X_train[j, :]))
-    #
-    #         L[i, j] = det_part * exp_part
-    #
-    # K_inv = np.linalg.inv(K)
-    # return 1 - np.trace((K_inv - np.outer(beta, beta)) @ L) - mean**2
