@@ -1,6 +1,8 @@
 from src.gpr import GaussianProcessRegression
-from src.tools.uncertainty_prop import mean_prop, variance_prop, covariance_prop
+from src.tools.uncertainty_prop import (mean_prop, variance_prop, covariance_prop,
+                                        mean_prop_torch, variance_prop_torch, covariance_prop_torch)
 import numpy as np
+import torch
 
 
 class Dynamics(object):
@@ -115,5 +117,69 @@ class Dynamics(object):
 
             # Copy values from lower diagonal to upper diagonal
             state_covars[t, :, :] += state_covars[t, :, :].T - np.diag(np.diag(state_covars[t, :, :]))
+
+        return state_means, state_covars
+
+    def forward_propagate_torch(self, horizon, curr_state, actions):
+        """
+        TODO: nominal models aren't taken into account here. Try to see if this can be remedied.
+        Given `horizon` number of actions, compute the expected states and state covariances.
+        Note that because this method only takes actions as arguments (and not states), this method
+        corresponds to a shooting method. This is implemented using Torch instead of NumPy.
+
+        Parameters:
+        ----------
+        horizon: int
+        curr_state: torch.tensor with dimensions (state_dim,)
+        actions: torch.tensor with dimensions (horizon, action_dim)
+        """
+        device = self.gpr_err[0].device
+        state_means = torch.zeros((horizon + 1, self.state_dim), device=device)
+        state_means[0, :] = curr_state
+        state_covars = torch.zeros((horizon + 1, self.state_dim, self.state_dim), device=device)
+        state_covars[0, :, :] = 1e-3 * torch.eye(self.state_dim, device=device)
+
+        X_train = self.gpr_err[0].X_train
+        y_train = self.gpr_err[0].y_train
+
+        for t in range(1, horizon + 1):
+            print("Timestep: ", t)
+            mean = torch.concatenate((state_means[t - 1, :], actions[t - 1, :]))
+
+            # Compute covariance matrix
+            covar_top = torch.concatenate((state_covars[t - 1, :, :],
+                                           torch.zeros((self.state_dim, self.action_dim), device=device)), dim=1)
+            covar_bottom = torch.concatenate((torch.zeros((self.action_dim, self.state_dim), device=device),
+                                              1e-3 * torch.eye(self.action_dim, device=device)), dim=1)
+            covar = torch.concatenate((covar_top, covar_bottom), dim=0)
+
+            betas = []
+            for s_dim in range(self.state_dim):
+                print("s_dim: ", s_dim)
+                # compute means for each state dimension
+                Ky_inv = self.gpr_err[s_dim].Ky_inv
+                lambdas = torch.exp(self.gpr_err[s_dim].log_lambdas)
+
+                state_means[t, s_dim], mp_dict = mean_prop_torch(Ky_inv, lambdas, mean, covar,
+                                                                 X_train, y_train.squeeze())[0]
+                betas.append(mp_dict['beta'])
+                # compute variances for each state dimension
+                state_covars[t, s_dim, s_dim] = variance_prop_torch(Ky_inv, lambdas, mean, covar,
+                                                                    X_train, state_means[t, s_dim], betas[s_dim])
+
+            # Find lower diagonal covariances
+            for i in range(1, self.state_dim):
+                for j in range(i):  # i not i-1
+                    lambdas_i = torch.exp(self.gpr_err[i].log_lambdas)
+                    lambdas_j = torch.exp(self.gpr_err[j].log_lambdas)
+
+                    # compute covariances between different state dimensions
+                    state_covars[t, i, j] = covariance_prop_torch(lambdas_i, lambdas_j,
+                                                                  mean, covar, X_train,
+                                                                  state_means[t, i], state_means[t, j],
+                                                                  betas[i], betas[j])
+
+            # Copy values from lower diagonal to upper diagonal
+            state_covars[t, :, :] += state_covars[t, :, :].mT - torch.diag(torch.diag(state_covars[t, :, :]))
 
         return state_means, state_covars

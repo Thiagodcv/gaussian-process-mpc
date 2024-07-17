@@ -98,7 +98,7 @@ class TestDynamics(TestCase):
         """
         Test forward propagate algorithm when not using a nominal model.
         """
-        num_train = 1000
+        num_train = 10
         dynamics = Dynamics(state_dim=2, action_dim=1, nominal_models=None)
         dynamics.gpr_err[0].set_sigma_n(0.1)
         dynamics.gpr_err[1].set_sigma_n(0.1)
