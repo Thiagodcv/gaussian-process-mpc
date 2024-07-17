@@ -134,9 +134,9 @@ class Dynamics(object):
         actions: torch.tensor with dimensions (horizon, action_dim)
         """
         device = self.gpr_err[0].device
-        state_means = torch.zeros((horizon + 1, self.state_dim), device=device)
+        state_means = torch.zeros((horizon + 1, self.state_dim), device=device).type(torch.float64)
         state_means[0, :] = curr_state
-        state_covars = torch.zeros((horizon + 1, self.state_dim, self.state_dim), device=device)
+        state_covars = torch.zeros((horizon + 1, self.state_dim, self.state_dim), device=device).type(torch.float64)
         state_covars[0, :, :] = 1e-3 * torch.eye(self.state_dim, device=device)
 
         X_train = self.gpr_err[0].X_train
@@ -161,7 +161,7 @@ class Dynamics(object):
                 lambdas = torch.exp(self.gpr_err[s_dim].log_lambdas)
 
                 state_means[t, s_dim], mp_dict = mean_prop_torch(Ky_inv, lambdas, mean, covar,
-                                                                 X_train, y_train.squeeze())[0]
+                                                                 X_train, y_train.squeeze())
                 betas.append(mp_dict['beta'])
                 # compute variances for each state dimension
                 state_covars[t, s_dim, s_dim] = variance_prop_torch(Ky_inv, lambdas, mean, covar,
