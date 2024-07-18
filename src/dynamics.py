@@ -123,6 +123,8 @@ class Dynamics(object):
     def forward_propagate_torch(self, horizon, curr_state, actions):
         """
         TODO: nominal models aren't taken into account here. Try to see if this can be remedied.
+        TODO: Figure out why CUDA runs out of memory for large num_train.
+        TODO: Figure out why covariance_prop_torch is much slower than for variance_prop_torch.
         Given `horizon` number of actions, compute the expected states and state covariances.
         Note that because this method only takes actions as arguments (and not states), this method
         corresponds to a shooting method. This is implemented using Torch instead of NumPy.

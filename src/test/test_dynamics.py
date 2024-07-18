@@ -133,6 +133,8 @@ class TestDynamics(TestCase):
     def test_forward_propagate_torch(self):
         """
         Test the Torch implementation of the forward propagate algorithm when not using a nominal model.
+        Make sure it agrees with NumPy implementation.
+
         num_train = 10 and horizon = 1: 0.028s
         num_train = 1000 and horizon = 1: 0.096s
         num_train = 1000 and horizon = 10: 0.82s
@@ -142,7 +144,7 @@ class TestDynamics(TestCase):
         os.environ['CUDA_LAUNCH_BLOCKING'] = '1'  # To show real time spent on .time()
 
         # Get GPR model set up
-        num_train = 3000
+        num_train = 10
         dynamics = Dynamics(state_dim=2, action_dim=1, nominal_models=None)
         dynamics.gpr_err[0].set_sigma_n(0.1)
         dynamics.gpr_err[1].set_sigma_n(0.1)
@@ -163,8 +165,16 @@ class TestDynamics(TestCase):
         dynamics.append_train_data(state, action, next_state)
 
         # Run forward propagation method
-        horizon = 10
-        init_state = torch.tensor([0., 0.5], device=device)
+        horizon = 2
+        init_state = np.array([0., 0.5])
+
+        # Run NumPy version (only do for small num_train)
+        state_means_np, state_covars_np = dynamics.forward_propagate(horizon=horizon,
+                                                                     curr_state=init_state,
+                                                                     actions=np.zeros((horizon, action_dim)))
+
+        init_state = torch.tensor(init_state, device=device)
+
         start = time.time()
         state_means, state_covars = dynamics.forward_propagate_torch(horizon=horizon,
                                                                      curr_state=init_state,
@@ -172,5 +182,9 @@ class TestDynamics(TestCase):
                                                                                          device=device))
         end = time.time()
         print("time: ", end-start)
+
         # run_str = 'dynamics.forward_propagate_torch(horizon=horizon, curr_state=init_state, actions=torch.zeros((horizon, action_dim), device=device))'
         # cProfile.runctx(run_str, globals(), locals())
+
+        self.assertTrue(np.linalg.norm(state_means.cpu().detach().numpy() - state_means_np) < 1e-7)
+        self.assertTrue(np.linalg.norm(state_covars.cpu().detach().numpy() - state_covars_np) < 1e-7)
