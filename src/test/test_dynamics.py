@@ -5,6 +5,7 @@ import numpy as np
 import torch
 import cProfile
 import time
+import os
 
 
 class TestDynamics(TestCase):
@@ -138,6 +139,7 @@ class TestDynamics(TestCase):
         num_train = 5000 and horizon = 10: 12.5s
         """
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        os.environ['CUDA_LAUNCH_BLOCKING'] = '1'  # To show real time spent on .time()
 
         # Get GPR model set up
         num_train = 3000

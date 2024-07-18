@@ -157,8 +157,8 @@ class Dynamics(object):
             for s_dim in range(self.state_dim):
                 print("s_dim: ", s_dim)
                 # compute means for each state dimension
-                Ky_inv = self.gpr_err[s_dim].Ky_inv
-                lambdas = torch.exp(self.gpr_err[s_dim].log_lambdas)
+                Ky_inv = self.gpr_err[s_dim].Ky_inv.detach()
+                lambdas = torch.exp(self.gpr_err[s_dim].log_lambdas).detach()
 
                 state_means[t, s_dim], mp_dict = mean_prop_torch(Ky_inv, lambdas, mean, covar,
                                                                  X_train, y_train.squeeze())
@@ -170,8 +170,8 @@ class Dynamics(object):
             # Find lower diagonal covariances
             for i in range(1, self.state_dim):
                 for j in range(i):  # i not i-1
-                    lambdas_i = torch.exp(self.gpr_err[i].log_lambdas)
-                    lambdas_j = torch.exp(self.gpr_err[j].log_lambdas)
+                    lambdas_i = torch.exp(self.gpr_err[i].log_lambdas).detach()
+                    lambdas_j = torch.exp(self.gpr_err[j].log_lambdas).detach()
 
                     # compute covariances between different state dimensions
                     state_covars[t, i, j] = covariance_prop_torch(lambdas_i, lambdas_j,

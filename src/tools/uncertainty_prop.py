@@ -324,8 +324,7 @@ def mean_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train):
     gauss_cov = torch.sum(((u - X_train) @ S_Lambda_inv) * (u - X_train), dim=1)
     l = (torch.linalg.det(Lambda_inv @ S + torch.eye(d, device=beta.device)) ** (-1/2)) * torch.exp(-1/2 * gauss_cov)
 
-    # return torch.dot(beta, l).item(), {'beta': beta, 'l': l}
-    return torch.dot(beta, l), {'beta': beta, 'l': l}
+    return torch.dot(beta, l).item(), {'beta': beta, 'l': l}
 
 
 def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, mean, beta):
@@ -384,8 +383,7 @@ def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, mean, beta):
     # Compute entire L matrix
     L = det_part * A_part * Lambda_part
 
-    # return (1 - torch.trace((Ky_inv - torch.outer(beta, beta)) @ L) - mean**2).item()
-    return 1 - torch.trace((Ky_inv - torch.outer(beta, beta)) @ L) - mean**2
+    return (1 - torch.trace((Ky_inv - torch.outer(beta, beta)) @ L) - mean**2).item()
 
 
 def covariance_prop_torch(lambdas1, lambdas2, u, S, X_train, mean1, mean2, beta1, beta2):
@@ -449,5 +447,4 @@ def covariance_prop_torch(lambdas1, lambdas2, u, S, X_train, mean1, mean2, beta1
     cov_part = torch.exp((-1/2)*(k1 + k2.mT))
     Q_tilde = det_part * cov_part * exp_part
 
-    # return (beta1 @ Q_tilde @ beta2 - mean1 * mean2).item()
-    return beta1 @ Q_tilde @ beta2 - mean1 * mean2
+    return (beta1 @ Q_tilde @ beta2 - mean1 * mean2).item()
