@@ -485,6 +485,75 @@ class TestGaussianProcessRegression(TestCase):
 
         print("Time to recompute from scratch: ", np.mean(scratch_list))
 
+    def test_matrix_inverse_strategies(self):
+        """
+        Test differences between torch.linalg.solve, torch.linalg.inv, torch.linalg.lu_solve.
+        lu_solve isn't necessarily better -- and the quality of inverse depends on whether you're doing
+        a left-multiply or a right-multiply with the inverse matrix (this problem doesn't exist for linalg.solve
+        and linalg.inv). torch.linalg.solve and torch.linalg.inv give the exact same result if you just want
+        to invert a matrix ignoring matrix multiplies.
+        """
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        num_train = 1000
+        lambdas = torch.tensor([1.], device=device)
+        sigma_f = torch.tensor(1., device=device)
+
+        X_train = torch.normal(mean=0., std=1., size=(num_train, 1), device=device)
+
+        X_train_mod = X_train * torch.sqrt(1 / lambdas)
+        dist_mat = torch.cdist(X_train_mod, X_train_mod, p=2)
+        Kf = (sigma_f ** 2) * torch.exp(-1 / 2 * torch.square(dist_mat))
+        # print(Kf)
+
+        Kf_inv = torch.linalg.inv(Kf)
+        Kf_solve_inv = torch.linalg.solve(Kf, torch.eye(num_train, device=device))
+
+        inv_norm_left = torch.linalg.norm(Kf_inv @ Kf - torch.eye(num_train, device=device))
+        solve_norm_left = torch.linalg.norm(Kf_solve_inv @ Kf - torch.eye(num_train, device=device))
+        print("inv_norm_left: ", inv_norm_left.item())
+        print("solve_norm_left: ", solve_norm_left.item())
+
+        inv_norm_right = torch.linalg.norm(Kf @ Kf_inv - torch.eye(num_train, device=device))
+        solve_norm_right = torch.linalg.norm(Kf @ Kf_solve_inv - torch.eye(num_train, device=device))
+        print("inv_norm_right: ", inv_norm_right.item())
+        print("solve_norm_right: ", solve_norm_right.item())
+
+        diff_norm = torch.linalg.norm(Kf_inv - Kf_solve_inv)
+        print("diff_norm: ", diff_norm.item())
+
+        # linalg.inv and linalg.solve produce the exact same inverse
+        LU, pivots = torch.linalg.lu_factor(Kf)
+        Kf_LU_inv = torch.linalg.lu_solve(LU, pivots, torch.eye(num_train, device=device))
+        lu_norm_right = torch.linalg.norm(Kf @ Kf_LU_inv - torch.eye(num_train, device=device))
+        lu_norm_left = torch.linalg.norm(Kf_LU_inv @ Kf - torch.eye(num_train, device=device))
+        print("lu_norm_right: ", lu_norm_right.item())
+        print("lu_norm_left: ", lu_norm_left.item())
+
+    def test_Ky_inverse_vs_Kf_inverse(self):
+        """
+        Test if adding sigma_n**2 * I to Kf improves condition number and inverse quality.
+        RESULT: Ky is much better conditioned than Kf, so forward propagation algorithms should be fine.
+        Even in GPR the only thing inverted is Ky, so we're safe!
+        """
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        num_train = 1000
+        lambdas = torch.tensor([1.], device=device)
+        sigma_f = torch.tensor(1., device=device)
+        sigma_n = torch.tensor(0.5, device=device)
+
+        X_train = torch.normal(mean=0., std=1., size=(num_train, 1), device=device)
+
+        X_train_mod = X_train * torch.sqrt(1 / lambdas)
+        dist_mat = torch.cdist(X_train_mod, X_train_mod, p=2)
+        Kf = (sigma_f ** 2) * torch.exp(-1 / 2 * torch.square(dist_mat))
+        Ky = Kf + (sigma_n ** 2) * torch.eye(num_train, device=device)
+
+        print("Kf cond: ", torch.linalg.cond(Kf))
+        print("Ky cond: ", torch.linalg.cond(Ky))
+
+        print("Kf inverse error: ", torch.linalg.norm(Kf @ torch.linalg.inv(Kf) - torch.eye(num_train, device=device)))
+        print("Ky inverse error: ", torch.linalg.norm(Ky @ torch.linalg.inv(Ky) - torch.eye(num_train, device=device)))
+
     # FUNCTIONS THAT ACTUALLY TEST GPR CLASS DIRECTLY
     # -----------------------------------------------
 
@@ -876,7 +945,8 @@ class TestGaussianProcessRegression(TestCase):
         def f(x): return x**2
         X_train = np.array([i for i in range(-5, 5 + 1)])
         X_train = X_train[:, None]
-        y_train = np.array([f(X_train[i, :].item()) for i in range(X_train.shape[0])]) + np.random.normal(loc=0, scale=1.0, size=len(X_train))
+        y_train = (np.array([f(X_train[i, :].item()) for i in range(X_train.shape[0])]) +
+                   np.random.normal(loc=0, scale=1.0, size=len(X_train)))
 
         gpr.append_train_data(X_train, y_train)
 
@@ -943,3 +1013,65 @@ class TestGaussianProcessRegression(TestCase):
         gpr2.append_train_data(X_train, y_train)
 
         self.assertTrue(np.linalg.norm(gpr1.Kf.cpu().detach().numpy() - gpr2.Kf.cpu().detach().numpy()) < 1e-5)
+
+    def test_1d_nominal_model(self):
+        """
+        Test fitting a 1d curve f(x) = x + 2*sin(x) with nominal model f_nom(x) = x + sin(x).
+        """
+        def nom_f(x): return x + torch.sin(x)
+
+        def f(x): return x + 2*np.sin(x)
+
+        gpr = GaussianProcessRegression(x_dim=1, nominal_model=nom_f)
+
+        X_train = np.array([1.])  # np.array([i for i in range(-5, 5 + 1)])
+        X_train = X_train[:, None]
+        y_train = (np.array([f(X_train[i, :].item()) for i in range(X_train.shape[0])]) +
+                   np.random.normal(loc=0, scale=0.2, size=len(X_train)))
+
+        gpr.append_train_data(X_train, y_train)
+
+        X_pred = np.linspace(-6, 6, 200)
+        X_pred = X_pred[:, None]
+
+        # Plot data
+        lambdas = [0.5]  # [i/10 for i in range(1, 10 + 1)]
+        sigma_f = 1
+        sigma_n = 0.2
+        gpr.set_sigma_f(sigma_f)
+        gpr.set_sigma_n(sigma_n)
+
+        for lambd in lambdas:
+            gpr.set_lambdas(np.array(lambd))
+            gpr.build_Ky_inv_mat()
+
+            mean, covar = gpr.predict_latent_vars(X_pred, covar=True)
+            mean = mean.squeeze()
+            ci95 = 2 * np.sqrt(np.diag(covar))
+            ml = gpr.compute_marginal_likelihood().item()
+
+            fig, ax = plt.subplots()
+            ax.plot(X_pred.squeeze(), mean)
+            ax.scatter(X_train.squeeze(), y_train, color='red')
+            ax.fill_between(X_pred.squeeze(), (mean - ci95), (mean + ci95), alpha=.1)
+
+            plt.title('ML: {:.2f}, lambda: {:.2f}, sigma_f: {:.2f}, sigma_n: {:.2f}'.
+                      format(ml, lambd, sigma_f, sigma_n))
+            plt.show()
+
+    def test_update_hyperparams_nominal_model(self):
+        """
+        Test updating the hyperparameters when a nominal model f(x) = x is given.
+        The data is generated by f(x) = x + sin(x).
+        """
+        def nom_f(x): return x
+
+        def f(x): return x + np.sin(x)
+
+        gpr = GaussianProcessRegression(x_dim=1, nominal_model=nom_f)
+        X_train = np.array([i for i in range(-5, 5 + 1)])
+        X_train = X_train[:, None]
+        y_train = (np.array([f(X_train[i, :].item()) for i in range(X_train.shape[0])]) +
+                   np.random.normal(loc=0, scale=1.0, size=len(X_train)))
+        gpr.append_train_data(X_train, y_train)
+        gpr.update_hyperparams()
