@@ -102,4 +102,3 @@ class TestRiskSensitiveMPC(TestCase):
         print(np_cost)
         print(torch_cost)
         self.assertTrue(np.linalg.norm(np_cost - torch_cost.item()) < 1e-5)
-        

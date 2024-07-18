@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from src.dynamics import Dynamics
 
 
 class RiskSensitiveMPC:
@@ -33,6 +34,7 @@ class RiskSensitiveMPC:
         self.Q = Q
         self.R = R
         self.R_delta = R_delta
+        self.dynamics = Dynamics(self.state_dim, self.input_dim, nominal_models=False)
 
         # Torch stuff. Perhaps will put everything in tensor format afterwards.
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -119,3 +121,18 @@ class RiskSensitiveMPC:
             cost += (u[j, :] - u_ref) @ self.R_tor @ (u[j, :] - u_ref)
 
         return cost
+
+    def objective(self, x):
+        """
+        Parameters:
+        ----------
+        x: (state_dim + horizon * input_dim,) np.array
+
+        Returns:
+        -------
+        scalar
+        """
+
+        u = x[self.state_dim:].reshape(self.horizon, self.input_dim)
+        x_init = x[0:self.state_dim]
+        
