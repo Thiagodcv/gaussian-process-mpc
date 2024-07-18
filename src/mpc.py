@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 
 
 class RiskSensitiveMPC:
@@ -32,6 +33,16 @@ class RiskSensitiveMPC:
         self.Q = Q
         self.R = R
         self.R_delta = R_delta
+
+        # Torch stuff. Perhaps will put everything in tensor format afterwards.
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.Q_tor = torch.tensor(self.Q, device=self.device).type(torch.float64)
+        self.R_tor = torch.tensor(self.R, device=self.device).type(torch.float64)
+
+        if self.R_delta is not None:
+            self.R_delta_tor = torch.tensor(self.R_delta, device=self.device).type(torch.float64)
+        else:
+            self.R_delta_tor = None
 
     def cost(self, x, u, sig, x_ref, u_ref):
         """
@@ -68,5 +79,43 @@ class RiskSensitiveMPC:
 
         for j in range(self.horizon):
             cost += (u[j, :] - u_ref).T @ self.R @ (u[j, :] - u_ref)
+
+        return cost
+
+    def cost_torch(self, x, u, sig, x_ref, u_ref):
+        """
+        Computes the risk-sensitive cost using PyTorch.
+
+        TODO: Add input rate cost to the cost returned
+
+        Parameters
+        ----------
+        x: (horizon+1, state_dim) torch tensor
+            A trajectory of state means; Assume x[0, :] is the current state
+        u: (horizon, input_dim) torch tensor
+            A trajectory of inputs
+        sig: (horizon+1, state_dim, state_dim) torch tensor
+            A trajectory of state covariance matrices
+        x_ref: (state_dim,) torch tensor
+            The reference (or setpoint) state
+        u_ref: (input_dim,) torch tensor
+            The reference (or setpoint) input
+
+        Returns
+        -------
+        scalar float
+        """
+
+        # Precompute inverse
+        Q_inv = torch.linalg.inv(self.Q_tor)
+
+        cost = 0
+        for i in range(self.horizon + 1):
+            cost += (1/self.gamma * torch.log(torch.linalg.det(torch.eye(self.state_dim, device=self.device) +
+                                                                 self.gamma * self.Q_tor @ sig[i, :, :])))
+            cost += (x[i, :] - x_ref) @ torch.linalg.inv(Q_inv + self.gamma * sig[i, :, :]) @ (x[i, :] - x_ref)
+
+        for j in range(self.horizon):
+            cost += (u[j, :] - u_ref) @ self.R_tor @ (u[j, :] - u_ref)
 
         return cost
