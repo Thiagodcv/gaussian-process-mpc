@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from src.dynamics import Dynamics
+import cyipopt
 
 
 class RiskSensitiveMPC:
@@ -54,6 +55,13 @@ class RiskSensitiveMPC:
         self.curr_cost = None
         self.curr_grad = None
         self.curr_state = None
+
+        # Save last optimal action trajectory to warm-start optimization in new timestep
+        self.last_traj = None
+
+        # Upper- and lower-bounds on control input
+        self.ub = [1e16 for _ in range(self.input_dim)]  # TODO: Make it so that these are settable
+        self.lb = [-1e16 for _ in range(self.input_dim)]
 
     def cost(self, x, u, sig, x_ref, u_ref):
         """
@@ -175,17 +183,17 @@ class RiskSensitiveMPC:
 
         return self.curr_grad
 
-    def constraints(self):
+    def constraints(self, x):
         """
-        TODO: Implement.
+        No complex constraints need to be applied to control inputs.
         """
-        pass
+        return 0
 
-    def jacobian(self):
+    def jacobian(self, x):
         """
-        TODO: Implement.
+        No complex constraints need to be applied to control inputs.
         """
-        pass
+        return np.zeros(x.shape)
 
     def get_optimal_trajectory(self, curr_state):
         """
@@ -203,3 +211,27 @@ class RiskSensitiveMPC:
             The optimal action trajectory
         """
         self.curr_state = curr_state
+
+        if self.last_traj is None:
+            x0 = [0 for _ in range(self.horizon * self.input_dim)]
+        else:
+            x0 = self.last_traj
+
+        expanded_lb = self.horizon * self.lb
+        expanded_ub = self.horizon * self.ub
+
+        nlp = cyipopt.Problem(
+            n=len(x0),
+            m=0,
+            problem_obj=self,
+            lb=expanded_lb,
+            ub=expanded_ub,
+            cl=[0],
+            cu=[0]
+        )
+
+        nlp.add_option('mu_strategy', 'adaptive')
+        nlp.add_option('tol', 1e-7)
+
+        x, info = nlp.solve(x0)
+        print(x)
