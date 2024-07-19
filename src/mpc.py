@@ -48,7 +48,7 @@ class RiskSensitiveMPC:
             self.R_delta_tor = None
 
         # Reference variables to guide states and actions towards
-        self.x_ref = torch.zeros(self.state_dim, device=self.device)  # TODO: Make it so that these are settable
+        self.x_ref = torch.zeros(self.state_dim, device=self.device)  
         self.u_ref = torch.zeros(self.input_dim, device=self.device)
 
         # Optimization variables in current iteration of IPOPT
@@ -60,8 +60,54 @@ class RiskSensitiveMPC:
         self.last_traj = None
 
         # Upper- and lower-bounds on control input
-        self.ub = [1e16 for _ in range(self.input_dim)]  # TODO: Make it so that these are settable
+        self.ub = [1e16 for _ in range(self.input_dim)]
         self.lb = [-1e16 for _ in range(self.input_dim)]
+
+    def set_ub(self, ub):
+        """
+        Set the upper bound on the control input.
+
+        Parameters:
+        ----------
+        ub: list of length input_dim
+            ub[i] is the upper bound of the ith dimension of the control input.
+        """
+        assert len(ub) == self.input_dim
+        self.ub = ub
+
+    def set_lb(self, lb):
+        """
+        Set the lower bound on the control input.
+
+        Parameters:
+        ----------
+        lb: list of length input_dim
+            lb[i] is the lower bound of the ith dimension of the control input.
+        """
+        assert len(lb) == self.input_dim
+        self.lb = lb
+
+    def set_xref(self, x_ref):
+        """
+        Set the set point of the state variable.
+
+        Parameters:
+        ----------
+        x_ref: numpy array of size (state_dim,)
+        """
+        assert len(x_ref) == self.state_dim
+        self.x_ref = torch.tensor(x_ref, device=self.device).type(torch.float64)
+
+    def set_uref(self, u_ref):
+        """
+        Set the set point of the input variable.
+
+        Parameters:
+        ----------
+        u_ref: numpy array of size (input_dim,)
+        """
+        assert len(u_ref) == self.input_dim
+        self.u_ref = torch.tensor(u_ref, device=self.device).type(torch.float64)
 
     def cost(self, x, u, sig, x_ref, u_ref):
         """
