@@ -131,4 +131,21 @@ class TestRiskSensitiveMPC(TestCase):
         mpc.dynamics.append_train_data(state, action, next_state)
 
         curr_state = np.array([0., 0.])
-        mpc.get_optimal_trajectory(curr_state)
+        opt_traj = mpc.get_optimal_trajectory(curr_state)
+        self.assertTrue(opt_traj.shape == (horizon, input_dim))
+
+    def test_shape_transform(self):
+        """
+        Just making sure np.reshape works the way I think it does.
+        """
+        ls = [1, 2, 3, 4, 1, 2, 3, 4]
+        ls_reshaped = np.reshape(ls, newshape=(2, 4))
+        ls_unshaped = np.reshape(ls_reshaped, newshape=(8,))
+
+        print(ls)
+        print(ls_reshaped)
+        print(ls_unshaped)
+
+        self.assertTrue(([[1, 2, 3, 4],
+                          [1, 2, 3, 4]] == ls_reshaped).all())
+        self.assertTrue((ls == ls_unshaped).all())

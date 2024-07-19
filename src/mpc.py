@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from src.dynamics import Dynamics
 import cyipopt
+import logging
 
 
 class RiskSensitiveMPC:
@@ -48,7 +49,7 @@ class RiskSensitiveMPC:
             self.R_delta_tor = None
 
         # Reference variables to guide states and actions towards
-        self.x_ref = torch.zeros(self.state_dim, device=self.device)  
+        self.x_ref = torch.zeros(self.state_dim, device=self.device)
         self.u_ref = torch.zeros(self.input_dim, device=self.device)
 
         # Optimization variables in current iteration of IPOPT
@@ -62,6 +63,9 @@ class RiskSensitiveMPC:
         # Upper- and lower-bounds on control input
         self.ub = [1e16 for _ in range(self.input_dim)]
         self.lb = [-1e16 for _ in range(self.input_dim)]
+
+        # Set logging level for cyipopt
+        cyipopt.set_logging_level(level=logging.WARNING)
 
     def set_ub(self, ub):
         """
@@ -279,5 +283,12 @@ class RiskSensitiveMPC:
         nlp.add_option('mu_strategy', 'adaptive')
         nlp.add_option('tol', 1e-7)
 
+        # Hide banner and other output to STDOUT
+        nlp.add_option('sb', 'yes')
+        nlp.add_option('print_level', 0)
+
         x, info = nlp.solve(x0)
         print('optimal solution:', x)
+
+        self.last_traj = x
+        return np.reshape(x, (self.horizon, self.input_dim))
