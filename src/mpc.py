@@ -35,7 +35,7 @@ class RiskSensitiveMPC:
         self.Q = Q
         self.R = R
         self.R_delta = R_delta
-        self.dynamics = Dynamics(self.state_dim, self.input_dim, nominal_models=False)
+        self.dynamics = Dynamics(self.state_dim, self.input_dim, nominal_models=None)
 
         # Torch stuff. Perhaps will put everything in tensor format afterwards.
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -48,8 +48,8 @@ class RiskSensitiveMPC:
             self.R_delta_tor = None
 
         # Reference variables to guide states and actions towards
-        self.x_ref = torch.zeros(self.state_dim)  # TODO: Make it so that these are settable
-        self.u_ref = torch.zeros(self.input_dim)
+        self.x_ref = torch.zeros(self.state_dim, device=self.device)  # TODO: Make it so that these are settable
+        self.u_ref = torch.zeros(self.input_dim, device=self.device)
 
         # Optimization variables in current iteration of IPOPT
         self.curr_cost = None
@@ -210,7 +210,7 @@ class RiskSensitiveMPC:
         (horizon, input_dim) np.array
             The optimal action trajectory
         """
-        self.curr_state = curr_state
+        self.curr_state = torch.tensor(curr_state, device=self.device).type(torch.float64)
 
         if self.last_traj is None:
             x0 = [0 for _ in range(self.horizon * self.input_dim)]
@@ -234,4 +234,4 @@ class RiskSensitiveMPC:
         nlp.add_option('tol', 1e-7)
 
         x, info = nlp.solve(x0)
-        print(x)
+        print('optimal solution:', x)

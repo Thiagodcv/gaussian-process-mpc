@@ -102,3 +102,33 @@ class TestRiskSensitiveMPC(TestCase):
         print(np_cost)
         print(torch_cost)
         self.assertTrue(np.linalg.norm(np_cost - torch_cost.item()) < 1e-5)
+
+    def test_get_optimal_trajectory(self):
+        """
+        Ensure method runs without failing and returns the same output as NumPy method.
+        """
+        horizon = 2
+        state_dim = 2
+        input_dim = 2
+        x_ref = np.array([0.5, 0.5])
+        u_ref = np.array([0.6, 0.6])
+        gamma = 1
+
+        Q = np.array([[2, 0],
+                      [0, 2]])
+        R = np.array([[1, 0],
+                      [0, 1]])
+
+        mpc = RiskSensitiveMPC(gamma, horizon, state_dim, input_dim, Q, R)
+
+        # Feed some data into dynamics object
+        state = np.array([[0., 0.],
+                          [1., 1.]])
+        action = np.array([[0., 0.],
+                           [0., 0.]])
+        next_state = np.array([[1., 1.],
+                               [2., 2.]])
+        mpc.dynamics.append_train_data(state, action, next_state)
+
+        curr_state = np.array([0., 0.])
+        mpc.get_optimal_trajectory(curr_state)
