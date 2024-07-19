@@ -46,6 +46,15 @@ class RiskSensitiveMPC:
         else:
             self.R_delta_tor = None
 
+        # Reference variables to guide states and actions towards
+        self.x_ref = torch.zeros(self.state_dim)  # TODO: Make it so that these are settable
+        self.u_ref = torch.zeros(self.input_dim)
+
+        # Optimization variables in current iteration of IPOPT
+        self.curr_cost = None
+        self.curr_grad = None
+        self.curr_state = None
+
     def cost(self, x, u, sig, x_ref, u_ref):
         """
         Computes the risk-sensitive cost.
@@ -105,7 +114,7 @@ class RiskSensitiveMPC:
 
         Returns
         -------
-        scalar float
+        scalar tensor
         """
 
         # Precompute inverse
@@ -124,15 +133,74 @@ class RiskSensitiveMPC:
 
     def objective(self, x):
         """
+        TODO: Need to test this method.
+        Callback for calculating the objective given an action trajectory. Used for IPOPT.
+
         Parameters:
         ----------
-        x: (state_dim + horizon * input_dim,) np.array
+        x: (horizon * input_dim,) np.array
 
         Returns:
         -------
         scalar
         """
+        u = torch.as_tensor(x.reshape(self.horizon, self.input_dim), device=self.device).type(torch.float64)
+        u.requires_grad_(True)
+        x_init = self.curr_state
 
-        u = x[self.state_dim:].reshape(self.horizon, self.input_dim)
-        x_init = x[0:self.state_dim]
-        
+        state_means, state_covars = self.dynamics.forward_propagate_torch(self.horizon, x_init, u)
+        cost = self.cost_torch(state_means, u, state_covars, self.x_ref, self.u_ref)
+        cost.backward()
+
+        self.curr_cost = cost
+        self.curr_grad = u.grad.cpu().detach().numpy()
+
+        return cost.item()
+
+    def gradient(self, x):
+        """
+        TODO: Need to test this method.
+        Callback for calculating the gradient of the objective w.r.t an action trajectory. Used for IPOPT.
+
+        Parameters:
+        ----------
+        x: (horizon * input_dim,) np.array
+
+        Returns:
+        -------
+        scalar
+        """
+        if self.curr_cost is None:
+            self.objective(x)
+
+        return self.curr_grad
+
+    def constraints(self):
+        """
+        TODO: Implement.
+        """
+        pass
+
+    def jacobian(self):
+        """
+        TODO: Implement.
+        """
+        pass
+
+    def get_optimal_trajectory(self, curr_state):
+        """
+        TODO: Need to test this method.
+        Use IPOPT to solve for optimal action trajectory given the current state.
+
+        Parameters:
+        ----------
+        curr_state: (state_dim,) np.array
+            The current state
+
+        Return:
+        ------
+        (horizon, input_dim) np.array
+            The optimal action trajectory
+        """
+        self.curr_state = curr_state
+
