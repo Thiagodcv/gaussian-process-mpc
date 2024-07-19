@@ -203,4 +203,3 @@ class RiskSensitiveMPC:
             The optimal action trajectory
         """
         self.curr_state = curr_state
-
