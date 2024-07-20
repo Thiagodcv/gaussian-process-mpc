@@ -145,7 +145,7 @@ class Dynamics(object):
         y_train = self.gpr_err[0].y_train
 
         for t in range(1, horizon + 1):
-            print("Timestep: ", t)
+            # print("Timestep: ", t)
             mean = torch.concatenate((state_means[t - 1, :], actions[t - 1, :]))
 
             # Compute covariance matrix
@@ -157,7 +157,7 @@ class Dynamics(object):
 
             betas = []
             for s_dim in range(self.state_dim):
-                print("s_dim: ", s_dim)
+                # print("s_dim: ", s_dim)
                 # compute means for each state dimension
                 Ky_inv = self.gpr_err[s_dim].Ky_inv.detach()
                 lambdas = torch.exp(self.gpr_err[s_dim].log_lambdas).detach()
