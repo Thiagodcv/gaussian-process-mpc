@@ -162,9 +162,10 @@ class TestRiskSensitiveMPC(TestCase):
 
         print(torch.diff(u, dim=0))
 
-    def test_cost_torch_w_R_delta(self):
+    def test_cost_torch_with_R_delta(self):
         """
         Ensure method runs without failing and returns the correct output.
+        R_delta is used in this test.
         """
         N_c = 2
         state_dim = 2
