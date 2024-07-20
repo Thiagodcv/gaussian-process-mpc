@@ -34,6 +34,7 @@ class Simulator(object):
                 action = np.zeros(self.mpc.input_dim)
 
             next_obs, reward, terminated, truncated, _ = self.env.step(action)
+            print("Timestep {}: Reward: {:.2f}".format(t, reward))
 
             if terminated or truncated:
                 break
