@@ -20,7 +20,7 @@ def pendulum_experiment():
 
     # Define MPC
     Q = 2 * np.identity(2)
-    R = 2 * np.identity(2)
+    R = 2 * np.array([[1]])
     R_delta = np.array([[1]])
     gamma = 1
     horizon = 10
