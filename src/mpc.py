@@ -151,8 +151,6 @@ class RiskSensitiveMPC:
         """
         Computes the risk-sensitive cost using PyTorch.
 
-        TODO: Add input rate cost to the cost returned
-
         Parameters
         ----------
         x: (horizon+1, state_dim) torch tensor
@@ -196,7 +194,7 @@ class RiskSensitiveMPC:
 
     def objective(self, x):
         """
-        TODO: Need to test this method.
+        TODO: This method isn't directly tested.
         Callback for calculating the objective given an action trajectory. Used for IPOPT.
 
         Parameters:
@@ -222,7 +220,7 @@ class RiskSensitiveMPC:
 
     def gradient(self, x):
         """
-        TODO: Need to test this method.
+        TODO: This method isn't directly tested.
         Callback for calculating the gradient of the objective w.r.t an action trajectory. Used for IPOPT.
 
         Parameters:
@@ -252,7 +250,7 @@ class RiskSensitiveMPC:
 
     def get_optimal_trajectory(self, curr_state):
         """
-        TODO: Need to test this method.
+        TODO: This method isn't directly tested.
         Use IPOPT to solve for optimal action trajectory given the current state.
 
         Parameters:
