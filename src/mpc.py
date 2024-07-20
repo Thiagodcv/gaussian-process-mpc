@@ -2,7 +2,6 @@ import numpy as np
 import torch
 from src.dynamics import Dynamics
 import cyipopt
-import logging
 
 
 class RiskSensitiveMPC:
@@ -58,14 +57,11 @@ class RiskSensitiveMPC:
         self.curr_state = None
 
         # Save last optimal action trajectory to warm-start optimization in new timestep
-        self.last_traj = None
+        self.last_traj = [0 for _ in range(self.horizon * self.input_dim)]
 
         # Upper- and lower-bounds on control input
         self.ub = [1e16 for _ in range(self.input_dim)]
         self.lb = [-1e16 for _ in range(self.input_dim)]
-
-        # Set logging level for cyipopt
-        cyipopt.set_logging_level(level=logging.WARNING)
 
     def set_ub(self, ub):
         """
@@ -187,6 +183,15 @@ class RiskSensitiveMPC:
         for j in range(self.horizon):
             cost += (u[j, :] - u_ref) @ self.R_tor @ (u[j, :] - u_ref)
 
+        if self.R_delta_tor is not None:
+            last_u = torch.tensor(self.last_traj[0:self.input_dim], device=self.device).type(torch.float64)
+            last_u = last_u[None, :]
+            u_expanded = torch.concatenate((last_u, u), dim=0)
+            delta_u = torch.diff(u_expanded, dim=0)
+
+            for j in range(self.horizon):
+                cost += delta_u[j, :] @ self.R_delta_tor @ delta_u[j, :]
+
         return cost
 
     def objective(self, x):
@@ -261,11 +266,7 @@ class RiskSensitiveMPC:
             The optimal action trajectory
         """
         self.curr_state = torch.tensor(curr_state, device=self.device).type(torch.float64)
-
-        if self.last_traj is None:
-            x0 = [0 for _ in range(self.horizon * self.input_dim)]
-        else:
-            x0 = self.last_traj
+        x0 = self.last_traj
 
         expanded_lb = self.horizon * self.lb
         expanded_ub = self.horizon * self.ub
