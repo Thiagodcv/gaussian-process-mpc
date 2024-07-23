@@ -154,6 +154,29 @@ class AdjustablePendulumEnv(gym.Env):
             self.render()
         return self._get_obs(), -costs, False, False, {}
 
+    @staticmethod
+    def step_static(state, u, options):
+        th = state[0]
+        thdot = state[1]
+
+        g = options['g']
+        m = options['m']
+        l = options['l']
+        dt = options['dt']
+        max_torque = options['max_torque']
+        max_speed = options['max_speed']
+
+        u = np.clip(u, -max_torque, max_torque)[0]
+        costs = angle_normalize(th) ** 2 + 0.1 * thdot**2 + 0.001 * (u**2)
+
+        newthdot = thdot + (3 * g / (2 * l) * np.sin(th) + 3.0 / (m * l**2) * u) * dt
+        newthdot = np.clip(newthdot, -max_speed, max_speed)
+        newth = th + newthdot * dt
+
+        state = np.array([newth, newthdot])
+
+        return state, -costs, False, False, {}
+
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)
         # Note: the options parameter is no longer functional.
