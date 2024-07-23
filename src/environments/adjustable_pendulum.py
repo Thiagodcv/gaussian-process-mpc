@@ -173,9 +173,9 @@ class AdjustablePendulumEnv(gym.Env):
         newthdot = np.clip(newthdot, -max_speed, max_speed)
         newth = th + newthdot * dt
 
-        state = np.array([newth, newthdot])
+        new_state = np.array([newth, newthdot])
 
-        return state, -costs, False, False, {}
+        return new_state
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)
