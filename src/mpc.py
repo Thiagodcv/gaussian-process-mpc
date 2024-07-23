@@ -55,9 +55,12 @@ class RiskSensitiveMPC:
         self.curr_cost = None
         self.curr_grad = None
         self.curr_state = None
+        self.backward_taken = False
+        self.curr_u = None
 
         # Save last optimal action trajectory to warm-start optimization in new timestep
-        self.last_traj = [0 for _ in range(self.horizon * self.input_dim)]
+        self.last_traj = np.random.standard_normal(size=(self.horizon * self.input_dim,))
+        # [0 for _ in range(self.horizon * self.input_dim)]
 
         # Upper- and lower-bounds on control input
         self.ub = [1e16 for _ in range(self.input_dim)]
@@ -205,16 +208,17 @@ class RiskSensitiveMPC:
         -------
         scalar
         """
+        print("objective")
         u = torch.as_tensor(x.reshape(self.horizon, self.input_dim), device=self.device).type(torch.float64)
         u.requires_grad_(True)
         x_init = self.curr_state
 
         state_means, state_covars = self.dynamics.forward_propagate_torch(self.horizon, x_init, u)
         cost = self.cost_torch(state_means, u, state_covars, self.x_ref, self.u_ref)
-        cost.backward()
 
         self.curr_cost = cost
-        self.curr_grad = u.grad.cpu().detach().numpy()
+        self.curr_u = u
+        self.backward_taken = False
 
         return cost.item()
 
@@ -231,10 +235,17 @@ class RiskSensitiveMPC:
         -------
         scalar
         """
+        print("gradient")
         if self.curr_cost is None:
             self.objective(x)
 
-        return self.curr_grad
+        if self.backward_taken:
+            return self.curr_grad
+        else:
+            self.curr_cost.backward()
+            self.backward_taken = True
+            self.curr_grad = self.curr_u.grad.cpu().detach().numpy()
+            return self.curr_grad
 
     def constraints(self, x):
         """
@@ -280,11 +291,21 @@ class RiskSensitiveMPC:
         )
 
         nlp.add_option('mu_strategy', 'adaptive')
-        nlp.add_option('tol', 1e-7)
+        nlp.add_option('accept_every_trial_step', 'yes')  # Disable line search
+
+        # Trying to loosen convergence constraints to converge earlier...
+        # nlp.add_option('tol', 1e-4)
+        # nlp.add_option('acceptable_tol', 1e-3)
+        # nlp.add_option('constr_viol_tol', 1e-4)
+        # nlp.add_option('compl_inf_tol', 1e-4)
+        # nlp.add_option('dual_inf_tol', 1e-4)
+        # nlp.add_option('mu_target', 1e-2)
+        # nlp.add_option('max_iter', 500)
+        # nlp.add_option('acceptable_iter', 5)
 
         # Hide banner and other output to STDOUT
-        nlp.add_option('sb', 'yes')
-        nlp.add_option('print_level', 0)
+        # nlp.add_option('sb', 'yes')
+        # nlp.add_option('print_level', 0)
 
         x, info = nlp.solve(x0)
         print('optimal solution:', x)
