@@ -293,15 +293,15 @@ class RiskSensitiveMPC:
         nlp.add_option('mu_strategy', 'adaptive')
         nlp.add_option('accept_every_trial_step', 'yes')  # Disable line search
 
-        # Trying to loosen convergence constraints to converge earlier...
-        # nlp.add_option('tol', 1e-4)
-        # nlp.add_option('acceptable_tol', 1e-3)
-        # nlp.add_option('constr_viol_tol', 1e-4)
-        # nlp.add_option('compl_inf_tol', 1e-4)
-        # nlp.add_option('dual_inf_tol', 1e-4)
-        # nlp.add_option('mu_target', 1e-2)
-        # nlp.add_option('max_iter', 500)
-        # nlp.add_option('acceptable_iter', 5)
+        # Trying to loosen convergence constraints to converge earlier... doesn't really seem to help
+        # nlp.add_option('tol', 1e-1)  # default 1e-8
+        # nlp.add_option('acceptable_tol', 1e-1)  # default 1e-6
+        # nlp.add_option('constr_viol_tol', 1e-1)  # default 1e-8
+        # nlp.add_option('compl_inf_tol', 1e-1)  # default 1e-8
+        # nlp.add_option('dual_inf_tol', 1e-1)  # default 1e-8
+        # nlp.add_option('mu_target', 1e-1)  # default 1e-6
+        # nlp.add_option('max_iter', 5)  # default 3000
+        # nlp.add_option('acceptable_iter', 5)  # default 15
 
         # Hide banner and other output to STDOUT
         # nlp.add_option('sb', 'yes')
