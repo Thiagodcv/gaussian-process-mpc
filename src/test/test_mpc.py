@@ -232,6 +232,9 @@ class TestRiskSensitiveMPC(TestCase):
         self.assertTrue(np.linalg.norm(cost_torch.tolist() - cost) < 1e-6)
 
     def test_state_cost(self):
+        """
+        Test RiskSensitiveMPC cost_torch() method when R = delta_R = 0.
+        """
         horizon = 5
         x_traj = np.array([5, 4, 3, 2, 1, 0])
         sig_traj = np.array([1/6, 1/7, 1/8, 1/9, 1/10, 1/11])
