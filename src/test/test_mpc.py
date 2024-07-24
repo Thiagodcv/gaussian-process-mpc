@@ -230,3 +230,31 @@ class TestRiskSensitiveMPC(TestCase):
         print(cost)
         print(cost_torch)
         self.assertTrue(np.linalg.norm(cost_torch.tolist() - cost) < 1e-6)
+
+    def test_state_cost(self):
+        horizon = 5
+        x_traj = np.array([5, 4, 3, 2, 1, 0])
+        sig_traj = np.array([1/6, 1/7, 1/8, 1/9, 1/10, 1/11])
+        cost_np = 0
+        for i in range(horizon + 1):
+            cost_np += -np.log(1-2*sig_traj[i]) + x_traj[i]**2 / (1/2 - sig_traj[i])
+        print(cost_np)
+
+        Q = 2 * np.identity(1)
+        R = np.array([[0]])
+        R_delta = np.array([[0]])
+        gamma = -1  # Negative gamma is risk-averse, positive gamma is risk-seeking
+        state_dim = 1
+        action_dim = 1
+        mpc = RiskSensitiveMPC(gamma, horizon, state_dim, action_dim, Q, R, R_delta)
+
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        x_traj = torch.tensor(x_traj, device=device).reshape(horizon+1, 1).type(torch.float64)
+        u_traj = torch.zeros(size=(horizon, 1), device=device).type(torch.float64)
+        sig_traj = torch.tensor(sig_traj, device=device).reshape(horizon+1, 1, 1).type(torch.float64)
+        x_ref = torch.zeros(1, device=device).type(torch.float64)
+        u_ref = torch.zeros(1, device=device).type(torch.float64)
+
+        cost = mpc.cost_torch(x_traj, u_traj, sig_traj, x_ref, u_ref)
+        print(cost.item())
+        self.assertTrue(np.abs(cost_np - cost.item()) < 1e-7)
