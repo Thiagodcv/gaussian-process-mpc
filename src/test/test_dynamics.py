@@ -197,7 +197,7 @@ class TestDynamics(TestCase):
         methods are really just approximations when used recursively.
         """
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        num_train = 100
+        num_train = 30
         s_min = -10
         s_max = 10
         a_min = -1
@@ -221,7 +221,8 @@ class TestDynamics(TestCase):
         mpc = RiskSensitiveMPC(gamma, horizon, state_dim, action_dim, Q, R, R_delta)
 
         mpc.dynamics.gpr_err[0].set_sigma_n(1e-5)  # Recall method doesn't automatically make Ky get rebuilt
-        # mpc.dynamics.gpr_err[0].set_sigma_f(5.)  This line seems to really screw things up
+        # TODO: sigma_f != 1 results diverge because prop algos assume sigma_f = 1
+        # mpc.dynamics.gpr_err[0].set_sigma_f(5.)
         mpc.dynamics.gpr_err[0].set_lambdas([2., 2.])
         mpc.dynamics.append_train_data(state, action, next_state)
         mpc.set_ub([a_max])
@@ -235,8 +236,8 @@ class TestDynamics(TestCase):
         state_means, state_covars = mpc.dynamics.forward_propagate_torch(horizon=horizon,
                                                                          curr_state=curr_state, actions=actions)
 
-        print(state_means)
-        print(state_covars)
+        print("forward_prop means: ", state_means.cpu().detach().numpy().flatten())
+        print("forward_prop vars: ", state_covars.cpu().detach().numpy().flatten())
 
         # MC Method
         num_iters = 1000
@@ -258,6 +259,6 @@ class TestDynamics(TestCase):
 
         x_means = np.mean(x_mat, axis=1)
         x_vars = np.var(x_mat, axis=1)
-        print(x_means)
-        print(x_vars)
+        print("MC means: ", x_means)
+        print("MC vars: ", x_vars)
         # Results seem to be pretty close!
