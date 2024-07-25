@@ -1,5 +1,6 @@
 from src.dynamics import Dynamics
 from src.models.pendulum import nom_model_th, nom_model_om, true_model_th, true_model_om, state_dim, action_dim
+from src.mpc import RiskSensitiveMPC
 from unittest import TestCase
 import numpy as np
 import torch
@@ -188,3 +189,51 @@ class TestDynamics(TestCase):
 
         self.assertTrue(np.linalg.norm(state_means.cpu().detach().numpy() - state_means_np) < 1e-7)
         self.assertTrue(np.linalg.norm(state_covars.cpu().detach().numpy() - state_covars_np) < 1e-7)
+
+    def test_forward_propagate_torch_mc(self):
+        """
+        Ensure Dynamics.forward_propagate_torch appears to match results from MC simulation. Note
+        that the results shouldn't necessarily be arbitrarily close for large N, since mean/variance/covariance_prop
+        methods are really just approximations when used recursively.
+        """
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        num_train = 100
+        s_min = -10
+        s_max = 10
+        a_min = -1
+        a_max = 1
+
+        def f(s, a):
+            return s + a
+
+        state = np.random.uniform(s_min, s_max, num_train)[:, None]
+        action = np.random.uniform(a_min, a_max, num_train)[:, None]
+
+        next_state = f(state, action)
+
+        Q = 2 * np.identity(1)
+        R = np.array([[0]])
+        R_delta = np.array([[0]])
+        gamma = 1e-5  # Negative gamma is risk-averse, positive gamma is risk-seeking
+        horizon = 5
+        state_dim = 1
+        action_dim = 1
+        mpc = RiskSensitiveMPC(gamma, horizon, state_dim, action_dim, Q, R, R_delta)
+
+        mpc.dynamics.gpr_err[0].set_sigma_n(1e-5)  # Recall method doesn't automatically make Ky get rebuilt
+        # mpc.dynamics.gpr_err[0].set_sigma_f(5.)  This line seems to really screw things up
+        mpc.dynamics.gpr_err[0].set_lambdas([2., 2.])
+        mpc.dynamics.append_train_data(state, action, next_state)
+        mpc.set_ub([a_max])
+        mpc.set_lb([a_min])
+        mpc.set_xref(np.array([0.]))
+        mpc.set_uref(np.array([0.]))
+
+        curr_state = torch.tensor([5.], device=device).type(torch.float64)
+        actions = torch.tensor([-1, -1, -1, -1, -1], device=device)[:, None].type(torch.float64)
+
+        state_means, state_covars = mpc.dynamics.forward_propagate_torch(horizon=horizon,
+                                                                         curr_state=curr_state, actions=actions)
+
+        print(state_means)
+        print(state_covars)
