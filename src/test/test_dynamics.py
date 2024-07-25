@@ -237,3 +237,27 @@ class TestDynamics(TestCase):
 
         print(state_means)
         print(state_covars)
+
+        # MC Method
+        num_iters = 1000
+        x0_mean = curr_state.cpu().detach().numpy()
+        x0 = np.random.normal(loc=x0_mean, scale=np.sqrt(1e-3), size=num_iters)[None, :]
+        x_mat = np.zeros((horizon, num_iters))
+        x_mat = np.concatenate((x0, x_mat), axis=0)
+
+        actions_mean = actions.cpu().detach().numpy()  # Actually, actions also have a variance of 1e-3
+        actions = np.random.multivariate_normal(mean=actions_mean.flatten(),
+                                                cov=1e-3*np.identity(horizon),
+                                                size=num_iters).T
+
+        for i in range(horizon):
+            for j in range(num_iters):
+                z = np.concatenate((x_mat[i, j][None], actions[i, j][None]))
+                x_mean, x_var = mpc.dynamics.gpr_err[0].predict_latent_vars(z[None, :], covar=True, targets=True)
+                x_mat[i+1, j] = np.random.normal(loc=x_mean[0, 0], scale=np.sqrt(x_var[0, 0]))
+
+        x_means = np.mean(x_mat, axis=1)
+        x_vars = np.var(x_mat, axis=1)
+        print(x_means)
+        print(x_vars)
+        # Results seem to be pretty close!
