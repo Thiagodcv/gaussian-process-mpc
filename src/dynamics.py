@@ -155,7 +155,7 @@ class Dynamics(object):
         y_train = self.gpr_err[0].y_train
 
         for t in range(1, horizon + 1):
-            print("Timestep: ", t)
+            # print("Timestep: ", t)
             mean = torch.concatenate((state_means[t - 1], actions[t - 1, :]))
             new_mean = torch.zeros((self.state_dim,), device=device).type(torch.float64)
             new_covar = torch.zeros((self.state_dim, self.state_dim), device=device).type(torch.float64)
@@ -204,6 +204,7 @@ class Dynamics(object):
                                                                   betas[i], betas[j])
 
             # Copy values from lower diagonal to upper diagonal
-            state_covars[t] += state_covars[t].mT - torch.diag(torch.diag(state_covars[t]))
+            # state_covars[t] += state_covars[t].mT - torch.diag(torch.diag(state_covars[t]))
+            state_covars[t] = state_covars[t] + state_covars[t].mT - torch.diag(torch.diag(state_covars[t]))
 
         return state_means, state_covars

@@ -4,6 +4,7 @@ from src.mpc import RiskSensitiveMPC
 from src.simulator import Simulator
 import os
 import cProfile
+import torch
 
 
 def test_experiment():
@@ -42,27 +43,30 @@ def test_experiment():
     mpc.set_uref(np.array([0.]))
 
     curr_state = np.array([5.])
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    mpc.curr_state = torch.tensor(curr_state, device=device).type(torch.float64)
+    torch.autograd.set_detect_anomaly(True)
 
     # Compute cost at minimizing trajectory when curr_state = [5]
-    # mpc.last_traj = np.array([-1, -1, -1, -1, -1])  # set as initial starting point. Note this is not global min.
+    mpc.last_traj = np.array([-1, -1, -1, -1, -1])  # set as initial starting point. Note this is not global min.
     mpc.get_optimal_trajectory(curr_state)
-    # opt_u = mpc.last_traj  # Expect to get u = [-1, -1, -1, -1, -1]
-    # min_cost = mpc.objective(opt_u)
-    # min_grad = mpc.gradient(opt_u)
-    # print("Cost of IPOPT trajectory: ", min_cost)
-    # print("Gradient at IPOPT trajectory: ", min_grad)
+    opt_u = mpc.last_traj  # Expect to get u = [-1, -1, -1, -1, -1]
+    min_cost = mpc.objective(opt_u)
+    min_grad = mpc.gradient(opt_u)
+    print("Cost of IPOPT trajectory: ", min_cost)
+    print("Gradient at IPOPT trajectory: ", min_grad)
 
-    intuit_traj = np.array([-1, -1, -1, -1, -1])
-    intuit_cost = mpc.objective(intuit_traj)
-    intuit_grad = mpc.gradient(intuit_traj)
-    print("Cost of intuitive trajectory: ", intuit_cost)
-    print("Gradient at intuitive trajectory: ", intuit_grad)
-
-    traj_d = np.array([-1, -1, -1, -1, -1.1])
-    traj_d_cost = mpc.objective(traj_d)
-    traj_d_grad = mpc.gradient(traj_d)
-    print("Cost of traj_d trajectory: ", traj_d_cost)
-    print("Gradient at traj_d trajectory: ", traj_d_grad)
+    # intuit_traj = np.array([-1, -1, -1])
+    # intuit_cost = mpc.objective(intuit_traj)
+    # intuit_grad = mpc.gradient(intuit_traj)
+    # print("Cost of intuitive trajectory: ", intuit_cost)
+    # print("Gradient at intuitive trajectory: ", intuit_grad)
+    #
+    # traj_d = np.array([-1, -1, -1.1])
+    # traj_d_cost = mpc.objective(traj_d)
+    # traj_d_grad = mpc.gradient(traj_d)
+    # print("Cost of traj_d trajectory: ", traj_d_cost)
+    # print("Gradient at traj_d trajectory: ", traj_d_grad)
 
 
 if __name__ == '__main__':

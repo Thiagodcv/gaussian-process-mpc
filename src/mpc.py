@@ -156,11 +156,11 @@ class RiskSensitiveMPC:
 
         Parameters
         ----------
-        x: (horizon+1, state_dim) torch tensor
-            A trajectory of state means; Assume x[0, :] is the current state
+        x: list of length horizon+1 with (state_dim,) torch tensors
+            A trajectory of state means; Assume x[0] is the current state
         u: (horizon, input_dim) torch tensor
             A trajectory of inputs
-        sig: (horizon+1, state_dim, state_dim) torch tensor
+        sig: list of length horizon+1 with (state_dim, state_dim) torch tensor
             A trajectory of state covariance matrices
         x_ref: (state_dim,) torch tensor
             The reference (or setpoint) state
@@ -177,12 +177,13 @@ class RiskSensitiveMPC:
 
         cost = 0
         for i in range(self.horizon + 1):
-            cost += (1/self.gamma * torch.log(torch.linalg.det(torch.eye(self.state_dim, device=self.device) +
-                                                                 self.gamma * self.Q_tor @ sig[i, :, :])))
-            cost += (x[i, :] - x_ref) @ torch.linalg.inv(Q_inv + self.gamma * sig[i, :, :]) @ (x[i, :] - x_ref)
+            cost = cost + (1/self.gamma * torch.log(torch.linalg.det(torch.eye(self.state_dim, device=self.device) +
+                                                                 self.gamma * self.Q_tor @ sig[i])))
+            cost = cost + (x[i] - x_ref) @ torch.linalg.inv(Q_inv + self.gamma * sig[i]) @ (x[i] - x_ref)
+            # cost += (x[i, :] - x_ref) @ self.Q_tor @ (x[i, :] - x_ref)  # for testing purposes only
 
         for j in range(self.horizon):
-            cost += (u[j, :] - u_ref) @ self.R_tor @ (u[j, :] - u_ref)
+            cost = cost + (u[j, :] - u_ref) @ self.R_tor @ (u[j, :] - u_ref)
 
         if self.R_delta_tor is not None:
             last_u = torch.tensor(self.last_traj[0:self.input_dim], device=self.device).type(torch.float64)
@@ -191,7 +192,7 @@ class RiskSensitiveMPC:
             delta_u = torch.diff(u_expanded, dim=0)
 
             for j in range(self.horizon):
-                cost += delta_u[j, :] @ self.R_delta_tor @ delta_u[j, :]
+                cost = cost + delta_u[j, :] @ self.R_delta_tor @ delta_u[j, :]
 
         return cost
 
@@ -208,13 +209,14 @@ class RiskSensitiveMPC:
         -------
         scalar
         """
-        # print("objective")
+        print("objective")
         u = torch.as_tensor(x.reshape(self.horizon, self.input_dim), device=self.device).type(torch.float64)
         u.requires_grad_(True)
         x_init = self.curr_state
 
         state_means, state_covars = self.dynamics.forward_propagate_torch(self.horizon, x_init, u)
         cost = self.cost_torch(state_means, u, state_covars, self.x_ref, self.u_ref)
+        # print("mean states: ", state_means)
 
         self.curr_cost = cost
         self.curr_u = u
@@ -235,14 +237,14 @@ class RiskSensitiveMPC:
         -------
         scalar
         """
-        # print("gradient")
+        print("gradient")
         if self.curr_cost is None:
             self.objective(x)
 
         if self.backward_taken:
             return self.curr_grad
         else:
-            self.curr_cost.backward()
+            self.curr_cost.backward(retain_graph=True)
             self.backward_taken = True
             self.curr_grad = self.curr_u.grad.cpu().detach().numpy()
             return self.curr_grad
@@ -294,7 +296,7 @@ class RiskSensitiveMPC:
         nlp.add_option('accept_every_trial_step', 'yes')  # Disable line search
 
         # Trying to loosen convergence constraints to converge earlier... doesn't really seem to help
-        nlp.add_option('max_iter', 10)  # default 3000
+        # nlp.add_option('max_iter', 10)  # default 3000
         # nlp.add_option('tol', 1e-1)  # default 1e-8
         # nlp.add_option('acceptable_tol', 1e-1)  # default 1e-6
         # nlp.add_option('constr_viol_tol', 1e-1)  # default 1e-8

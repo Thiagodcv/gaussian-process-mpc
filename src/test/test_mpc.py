@@ -131,6 +131,7 @@ class TestRiskSensitiveMPC(TestCase):
         mpc.dynamics.append_train_data(state, action, next_state)
 
         curr_state = np.array([0., 0.])
+        torch.autograd.set_detect_anomaly(True)
         opt_traj = mpc.get_optimal_trajectory(curr_state)
         self.assertTrue(opt_traj.shape == (horizon, input_dim))
 
@@ -181,12 +182,12 @@ class TestRiskSensitiveMPC(TestCase):
         x_traj[1, :] = np.array([2, 2])
         x_traj[2, :] = np.array([3, 3])
         u_traj[0, :] = np.array([2, 2])
-        u_traj[0, :] = np.array([4, 4])
+        u_traj[1, :] = np.array([4, 4])
         sig_traj[0, :, :] = np.array([[1, 2],
                                       [3, 4]])
         sig_traj[1, :, :] = np.array([[5, 6],
                                       [7, 8]])
-        sig_traj[1, :, :] = np.array([[9, 10],
+        sig_traj[2, :, :] = np.array([[9, 10],
                                       [11, 12]])
         gamma = 1.1
 
@@ -198,7 +199,7 @@ class TestRiskSensitiveMPC(TestCase):
 
         # Manually compute cost
         cost = 0
-        cost += 1/gamma * np.log(np.linalg.det(np.identity(state_dim) + gamma * Q @ sig_traj[0, :, :]))
+        cost += 1 / gamma * np.log(np.linalg.det(np.identity(state_dim) + gamma * Q @ sig_traj[0, :, :]))
         cost += 1 / gamma * np.log(np.linalg.det(np.identity(state_dim) + gamma * Q @ sig_traj[1, :, :]))
         cost += 1 / gamma * np.log(np.linalg.det(np.identity(state_dim) + gamma * Q @ sig_traj[2, :, :]))
 
@@ -220,11 +221,18 @@ class TestRiskSensitiveMPC(TestCase):
         # Compute cost using torch
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         x_traj = torch.tensor(x_traj, device=device).to(torch.float64)
+        x_traj = [x_traj[0, :], x_traj[1, :], x_traj[2, :]]
+
         u_traj = torch.tensor(u_traj, device=device).to(torch.float64)
+
         sig_traj = torch.tensor(sig_traj, device=device).to(torch.float64)
+        sig_traj = [sig_traj[0, :, :], sig_traj[1, :, :], sig_traj[2, :, :]]
+
         x_ref = torch.tensor(x_ref, device=device).to(torch.float64)
         u_ref = torch.tensor(u_ref, device=device).to(torch.float64)
 
+        # Now mpc.last_traj is generated randomly, so set to zeros for test to still work
+        mpc.last_traj = [0 for _ in range(N_c * input_dim)]
         cost_torch = mpc.cost_torch(x_traj, u_traj, sig_traj, x_ref, u_ref)
 
         print(cost)
