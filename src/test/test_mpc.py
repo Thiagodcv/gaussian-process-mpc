@@ -122,12 +122,15 @@ class TestRiskSensitiveMPC(TestCase):
         mpc = RiskSensitiveMPC(gamma, horizon, state_dim, input_dim, Q, R)
 
         # Feed some data into dynamics object
-        state = np.array([[0., 0.],
-                          [1., 1.]])
-        action = np.array([[0., 0.],
-                           [0., 0.]])
-        next_state = np.array([[1., 1.],
-                               [2., 2.]])
+        # state = np.array([[0., 1.],
+        #                   [1., 2.]])
+        # action = np.array([[0., 0.],
+        #                    [0., 0.]])
+        # next_state = np.array([[1., 2.],
+        #                        [2., 3.]])
+        state = np.random.standard_normal(size=(2, 2))
+        action = np.random.standard_normal(size=(2, 2))
+        next_state = np.random.standard_normal(size=(2, 2))
         mpc.dynamics.append_train_data(state, action, next_state)
 
         curr_state = np.array([0., 0.])
