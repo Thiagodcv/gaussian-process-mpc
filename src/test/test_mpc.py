@@ -272,3 +272,70 @@ class TestRiskSensitiveMPC(TestCase):
         cost = mpc.cost_torch(x_traj, u_traj, sig_traj, x_ref, u_ref)
         print(cost.item())
         self.assertTrue(np.abs(cost_np - cost.item()) < 1e-7)
+
+    def test_mpc_autograd(self):
+        """
+        Test if MPC autograd is functioning properly. It appears that it is, although when testing gradients
+        against finite-difference approximations, you can only set epsilon to be so small before machine
+        error begins to destroy the quality of the finite difference approx, and the results begin to diverge.
+        epsilon = 1e-2 leads to fd approx that is closest to pytorch gradients. We set -10 <= s <= 10 and -1 <= a <= 1.
+        """
+        num_train = 1000
+        s_min = -10
+        s_max = 10
+        a_min = -1
+        a_max = 1
+
+        def f(s, a):
+            return s + a
+
+        state = np.random.uniform(s_min, s_max, num_train)[:, None]
+        action = np.random.uniform(a_min, a_max, num_train)[:, None]
+
+        next_state = f(state, action)
+
+        Q = 2 * np.identity(1)
+        R = np.array([[1]])
+        R_delta = np.array([[0]])
+        gamma = 1e-5  # Negative gamma is risk-averse, positive gamma is risk-seeking
+        horizon = 3
+        state_dim = 1
+        action_dim = 1
+        mpc = RiskSensitiveMPC(gamma, horizon, state_dim, action_dim, Q, R, R_delta)
+
+        mpc.dynamics.gpr_err[0].set_sigma_n(1e-5)  # Recall method doesn't automatically make Ky get rebuilt
+        mpc.dynamics.gpr_err[0].set_lambdas([2., 2.])
+        mpc.dynamics.append_train_data(state, action, next_state)
+        mpc.set_ub([a_max])
+        mpc.set_lb([a_min])
+        mpc.set_xref(np.array([0.]))
+        mpc.set_uref(np.array([0.]))
+
+        curr_state = np.array([5.])
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        mpc.curr_state = torch.tensor(curr_state, device=device).type(torch.float64)
+        torch.autograd.set_detect_anomaly(True)
+
+        # It seems like when epsilon is made small, gradients & finite differences diverge due to machine error
+        epsilon = 1e-2
+        traj = np.array([-1., -1., -1.])  # FD & PyTorch agree for many different trajectories.
+        cost = mpc.objective(traj)
+        grad = mpc.gradient(traj)
+
+        traj_pert0 = traj.copy()
+        traj_pert0[0] += epsilon
+        cost_pert0 = mpc.objective(traj_pert0)
+        grad_finite_diff_0 = (cost_pert0 - cost)/epsilon
+
+        traj_pert1 = traj.copy()
+        traj_pert1[1] += epsilon
+        cost_pert1 = mpc.objective(traj_pert1)
+        grad_finite_diff_1 = (cost_pert1 - cost)/epsilon
+
+        traj_pert2 = traj.copy()
+        traj_pert2[2] += epsilon
+        cost_pert2 = mpc.objective(traj_pert2)
+        grad_finite_diff_2 = (cost_pert2 - cost)/epsilon
+
+        print("Finite difference gradient: ", [grad_finite_diff_0, grad_finite_diff_1, grad_finite_diff_2])
+        print("Autograd gradient: ", grad)

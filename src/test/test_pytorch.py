@@ -17,12 +17,12 @@ class TestPytorch(TestCase):
 
         # Next 6 lines causes this bug:
         # RuntimeError: one of the variables needed for gradient computation has been modified by an inplace operation.
-        y = torch.tensor([0., 0.], device=device)
-        y[0] = x
-        y[1] = y[0]**2
-
-        y[1].backward()
-        print(x.grad)
+        # y = torch.tensor([0., 0.], device=device)
+        # y[0] = x
+        # y[1] = y[0]**2
+        #
+        # y[1].backward()
+        # print(x.grad)
 
         # Instead do
         # y = list()
@@ -32,3 +32,9 @@ class TestPytorch(TestCase):
         # cost.backward()
         # print(x.grad)
 
+        # How about concatenation?
+        y = x
+        b = y**2
+        y = torch.concatenate((y, b))
+        y[1].backward()
+        print(x.grad)
