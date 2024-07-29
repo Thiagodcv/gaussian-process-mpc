@@ -209,7 +209,8 @@ class RiskSensitiveMPC:
         -------
         scalar
         """
-        print("objective")
+        # print("objective")
+        # print("curr_x: ", x)
         u = torch.as_tensor(x.reshape(self.horizon, self.input_dim), device=self.device).type(torch.float64)
         u.requires_grad_(True)
         x_init = self.curr_state
@@ -237,7 +238,7 @@ class RiskSensitiveMPC:
         -------
         scalar
         """
-        print("gradient")
+        # print("gradient")
         if self.curr_cost is None:
             self.objective(x)
 
@@ -247,6 +248,7 @@ class RiskSensitiveMPC:
             self.curr_cost.backward(retain_graph=True)
             self.backward_taken = True
             self.curr_grad = self.curr_u.grad.cpu().detach().numpy()
+            # print("curr_grad: ", self.curr_grad)
             return self.curr_grad
 
     def constraints(self, x):
@@ -294,16 +296,17 @@ class RiskSensitiveMPC:
 
         nlp.add_option('mu_strategy', 'adaptive')
         nlp.add_option('accept_every_trial_step', 'yes')  # Disable line search
+        # nlp.add_option('limited_memory_update_type', 'bfgs')
 
         # Trying to loosen convergence constraints to converge earlier... doesn't really seem to help
         # nlp.add_option('max_iter', 10)  # default 3000
-        # nlp.add_option('tol', 1e-1)  # default 1e-8
-        # nlp.add_option('acceptable_tol', 1e-1)  # default 1e-6
-        # nlp.add_option('constr_viol_tol', 1e-1)  # default 1e-8
-        # nlp.add_option('compl_inf_tol', 1e-1)  # default 1e-8
-        # nlp.add_option('dual_inf_tol', 1e-1)  # default 1e-8
-        # nlp.add_option('mu_target', 1e-1)  # default 1e-6
-        # nlp.add_option('acceptable_iter', 5)  # default 15
+        nlp.add_option('tol', 1e-4)  # default 1e-8
+        nlp.add_option('acceptable_tol', 1e-4)  # default 1e-6
+        nlp.add_option('constr_viol_tol', 1e-4)  # default 1e-8
+        nlp.add_option('compl_inf_tol', 1e-4)  # default 1e-8
+        nlp.add_option('dual_inf_tol', 1e-4)  # default 1e-8
+        nlp.add_option('mu_target', 1e-4)  # default 1e-6
+        nlp.add_option('acceptable_iter', 3)  # default 15
 
         # Hide banner and other output to STDOUT
         # nlp.add_option('sb', 'yes')

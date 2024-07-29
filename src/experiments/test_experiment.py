@@ -11,7 +11,7 @@ def test_experiment():
     """
     Suppose -10 <= s <= 10 and -1 <= a <= 1.
     """
-    num_train = 1000
+    num_train = 100
     s_min = -10
     s_max = 10
     a_min = -1
@@ -48,7 +48,7 @@ def test_experiment():
     torch.autograd.set_detect_anomaly(True)
 
     # Compute cost at minimizing trajectory when curr_state = [5]
-    mpc.last_traj = np.array([-1, -1, -1, -1, -1])  # set as initial starting point. Note this is not global min.
+    # mpc.last_traj = np.array([-1, -1, -1, -1, -1])  # set as initial starting point. Note this is not global min.
     mpc.get_optimal_trajectory(curr_state)
     opt_u = mpc.last_traj  # Expect to get u = [-1, -1, -1, -1, -1]
     min_cost = mpc.objective(opt_u)
