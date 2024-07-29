@@ -187,8 +187,13 @@ class TestDynamics(TestCase):
         # run_str = 'dynamics.forward_propagate_torch(horizon=horizon, curr_state=init_state, actions=torch.zeros((horizon, action_dim), device=device))'
         # cProfile.runctx(run_str, globals(), locals())
 
-        self.assertTrue(np.linalg.norm(state_means.cpu().detach().numpy() - state_means_np) < 1e-7)
-        self.assertTrue(np.linalg.norm(state_covars.cpu().detach().numpy() - state_covars_np) < 1e-7)
+        self.assertTrue(np.linalg.norm(state_means[0].cpu().detach().numpy() - state_means_np[0, :]) < 1e-7)
+        self.assertTrue(np.linalg.norm(state_means[1].cpu().detach().numpy() - state_means_np[1, :]) < 1e-7)
+        self.assertTrue(np.linalg.norm(state_means[2].cpu().detach().numpy() - state_means_np[2, :]) < 1e-7)
+
+        self.assertTrue(np.linalg.norm(state_covars[0].cpu().detach().numpy() - state_covars_np[0, :, :]) < 1e-7)
+        self.assertTrue(np.linalg.norm(state_covars[1].cpu().detach().numpy() - state_covars_np[1, :, :]) < 1e-7)
+        self.assertTrue(np.linalg.norm(state_covars[2].cpu().detach().numpy() - state_covars_np[2, :, :]) < 1e-7)
 
     def test_forward_propagate_torch_mc(self):
         """
@@ -236,8 +241,8 @@ class TestDynamics(TestCase):
         state_means, state_covars = mpc.dynamics.forward_propagate_torch(horizon=horizon,
                                                                          curr_state=curr_state, actions=actions)
 
-        print("forward_prop means: ", state_means.cpu().detach().numpy().flatten())
-        print("forward_prop vars: ", state_covars.cpu().detach().numpy().flatten())
+        print("forward_prop means: ", torch.concatenate(state_means, axis=0).cpu().detach().numpy())
+        print("forward_prop vars: ", torch.concatenate(state_covars, axis=0).cpu().detach().numpy().flatten())
 
         # MC Method
         num_iters = 1000

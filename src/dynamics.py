@@ -34,6 +34,7 @@ class Dynamics(object):
         else:
             self.gpr_err = [GaussianProcessRegression(self.state_dim + self.action_dim,
                                                       nominal_models[i]) for i in range(state_dim)]
+        self.device = self.gpr_err[0].device
 
     def append_train_data(self, state, action, next_state):
         """
@@ -135,54 +136,54 @@ class Dynamics(object):
         horizon: int
         curr_state: torch.tensor with dimensions (state_dim,)
         actions: torch.tensor with dimensions (horizon, action_dim)
+
+        Returns:
+        -------
+        state_means: list of tensors
+        state_covars: list of tensors
         """
-        device = self.gpr_err[0].device
-        state_means = torch.zeros((horizon + 1, self.state_dim), device=device).type(torch.float64)
-        state_means[0, :] = curr_state
-        state_covars = torch.zeros((horizon + 1, self.state_dim, self.state_dim), device=device).type(torch.float64)
-        state_covars[0, :, :] = 1e-3 * torch.eye(self.state_dim, device=device)
+        state_means = list()
+        state_means.append(curr_state)
+        state_covars = list()
+        state_covars.append(1e-3 * torch.eye(self.state_dim, device=self.device).type(torch.float64))
 
         X_train = self.gpr_err[0].X_train
-        y_train = self.gpr_err[0].y_train
 
         for t in range(1, horizon + 1):
             # print("Timestep: ", t)
-            mean = torch.concatenate((state_means[t - 1, :], actions[t - 1, :]))
+            mean = torch.concatenate((state_means[t - 1], actions[t - 1, :]))
+            new_mean = []
+            new_var = []
 
             # Compute covariance matrix
-            covar_top = torch.concatenate((state_covars[t - 1, :, :],
-                                           torch.zeros((self.state_dim, self.action_dim), device=device)), dim=1)
-            covar_bottom = torch.concatenate((torch.zeros((self.action_dim, self.state_dim), device=device),
-                                              1e-3 * torch.eye(self.action_dim, device=device)), dim=1)
+            covar_top = torch.concatenate((state_covars[t - 1],
+                                           torch.zeros((self.state_dim, self.action_dim), device=self.device)), dim=1)
+            covar_bottom = torch.concatenate((torch.zeros((self.action_dim, self.state_dim), device=self.device),
+                                              1e-3 * torch.eye(self.action_dim, device=self.device)), dim=1)
             covar = torch.concatenate((covar_top, covar_bottom), dim=0)
 
             betas = []
             for s_dim in range(self.state_dim):
                 # print("s_dim: ", s_dim)
+
                 # compute means for each state dimension
                 Ky_inv = self.gpr_err[s_dim].Ky_inv.detach()
                 lambdas = torch.exp(self.gpr_err[s_dim].log_lambdas).detach()
+                y_train = self.gpr_err[s_dim].y_train  # Each GPR has different y_train
 
-                state_means[t, s_dim], mp_dict = mean_prop_torch(Ky_inv, lambdas, mean, covar,
-                                                                 X_train, y_train.squeeze())
+                mean_elem, mp_dict = mean_prop_torch(Ky_inv, lambdas, mean, covar, X_train, y_train.squeeze())
+                new_mean.append(mean_elem)
                 betas.append(mp_dict['beta'])
+
                 # compute variances for each state dimension
-                state_covars[t, s_dim, s_dim] = variance_prop_torch(Ky_inv, lambdas, mean, covar,
-                                                                    X_train, state_means[t, s_dim], betas[s_dim])
+                var_elem = variance_prop_torch(Ky_inv, lambdas, mean, covar, X_train, new_mean[s_dim], betas[s_dim])
+                new_var.append(var_elem)
 
-            # Find lower diagonal covariances
-            for i in range(1, self.state_dim):
-                for j in range(i):  # i not i-1
-                    lambdas_i = torch.exp(self.gpr_err[i].log_lambdas).detach()
-                    lambdas_j = torch.exp(self.gpr_err[j].log_lambdas).detach()
+            # TODO: So far, only paying attention to mean and variance. Implement covariance.
+            mean_tensor = torch.stack(new_mean)
+            state_means.append(mean_tensor)
 
-                    # compute covariances between different state dimensions
-                    state_covars[t, i, j] = covariance_prop_torch(lambdas_i, lambdas_j,
-                                                                  mean, covar, X_train,
-                                                                  state_means[t, i], state_means[t, j],
-                                                                  betas[i], betas[j])
-
-            # Copy values from lower diagonal to upper diagonal
-            state_covars[t, :, :] += state_covars[t, :, :].mT - torch.diag(torch.diag(state_covars[t, :, :]))
+            covar_tensor = torch.diag(torch.stack(new_var))
+            state_covars.append(covar_tensor)
 
         return state_means, state_covars
