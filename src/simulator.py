@@ -25,6 +25,7 @@ class Simulator(object):
         """
         obs, info = self.env.reset()
         for t in range(self.num_iters):
+            print("state: ", obs)
 
             # The GP model that I implemented is only well-defined when the training set has at least 2 observations.
             # This is just a work-around for the time being. TODO: Fix this.

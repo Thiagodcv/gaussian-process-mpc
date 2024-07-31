@@ -13,7 +13,7 @@ class TestIPOPT(TestCase):
         pass
 
     def test_ipopt(self):
-        x0 = [1.0, 5.0, 5.0, 1.0]
+        x0 = [1.0, 5.0, 5.0, 5.0]  # ,1.0]
 
         lb = [1.0, 1.0, 1.0, 1.0]
         ub = [5.0, 5.0, 5.0, 5.0]
@@ -47,12 +47,14 @@ class hs071(object):
         #
         # The callback for calculating the objective
         #
+        print('objective')
         return x[0] * x[3] * np.sum(x[0:3]) + x[2]
 
     def gradient(self, x):
         #
         # The callback for calculating the gradient of objective function
         #
+        print('gradient')
         return np.array([
                     x[0] * x[3] + x[3] * np.sum(x[0:3]),
                     x[0] * x[3],
@@ -64,53 +66,57 @@ class hs071(object):
         #
         # The callback for calculating the constraint functions
         #
+        print('constraints')
         return np.array((np.prod(x), np.dot(x, x)))
 
     def jacobian(self, x):
         #
         # The callback for calculating the Jacobian of constraint functions
         #
+        print('jacobian')
         return np.concatenate((np.prod(x) / x, 2*x))
 
-    def hessianstructure(self):
-        #
-        # Callback function that accepts no parameters and returns the sparsity structure
-        # of the Hessian of the lagrangian (the row and column indices only)
-        #
-        # Note:
-        # The default hessian structure is of a lower triangular matrix. Therefore
-        # this function is redundant. I include it as an example for structure
-        # callback.
-        #
-        global hs
-
-        # hs = sps.coo_matrix(np.tril(np.ones((4, 4))))
-        hs = scipy.sparse.coo_matrix(np.tril(np.ones((4, 4))))
-        return (hs.col, hs.row)
-
-    def hessian(self, x, lagrange, obj_factor):
-        #
-        # The callback for calculating the Hessian of the Lagrangian
-        #
-        H = obj_factor*np.array((
-                (2*x[3], 0, 0, 0),
-                (x[3],   0, 0, 0),
-                (x[3],   0, 0, 0),
-                (2*x[0]+x[1]+x[2], x[0], x[0], 0)))
-
-        H += lagrange[0]*np.array((
-                (0, 0, 0, 0),
-                (x[2]*x[3], 0, 0, 0),
-                (x[1]*x[3], x[0]*x[3], 0, 0),
-                (x[1]*x[2], x[0]*x[2], x[0]*x[1], 0)))
-
-        H += lagrange[1]*2*np.eye(4)
-
-        #
-        # Note:
-        #
-        #
-        return H[hs.row, hs.col]
+    # def hessianstructure(self):
+    #     #
+    #     # Callback function that accepts no parameters and returns the sparsity structure
+    #     # of the Hessian of the lagrangian (the row and column indices only)
+    #     #
+    #     # Note:
+    #     # The default hessian structure is of a lower triangular matrix. Therefore
+    #     # this function is redundant. I include it as an example for structure
+    #     # callback.
+    #     #
+    #     print('hessianstructure')
+    #     global hs
+    #
+    #     # hs = sps.coo_matrix(np.tril(np.ones((4, 4))))
+    #     hs = scipy.sparse.coo_matrix(np.tril(np.ones((4, 4))))
+    #     return (hs.col, hs.row)
+    #
+    # def hessian(self, x, lagrange, obj_factor):
+    #     #
+    #     # The callback for calculating the Hessian of the Lagrangian
+    #     #
+    #     print('hessian')
+    #     H = obj_factor*np.array((
+    #             (2*x[3], 0, 0, 0),
+    #             (x[3],   0, 0, 0),
+    #             (x[3],   0, 0, 0),
+    #             (2*x[0]+x[1]+x[2], x[0], x[0], 0)))
+    #
+    #     H += lagrange[0]*np.array((
+    #             (0, 0, 0, 0),
+    #             (x[2]*x[3], 0, 0, 0),
+    #             (x[1]*x[3], x[0]*x[3], 0, 0),
+    #             (x[1]*x[2], x[0]*x[2], x[0]*x[1], 0)))
+    #
+    #     H += lagrange[1]*2*np.eye(4)
+    #
+    #     #
+    #     # Note:
+    #     #
+    #     #
+    #     return H[hs.row, hs.col]
 
     def intermediate(
             self,

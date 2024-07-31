@@ -7,7 +7,7 @@ import cProfile
 
 
 def pendulum_experiment():
-    num_train = 1000
+    num_train = 300
     options = {'g': 10.0,
                'dt': 0.05,
                'm': 1.0,
@@ -28,10 +28,10 @@ def pendulum_experiment():
     g = options['g']
     max_speed = options['max_speed']
     max_torque = options['max_torque']
-    init_state = {'th_init': 1.1 * np.pi, 'thdot_init': 2}
+    init_state = {'th_init': 0, 'thdot_init': -1}
     seed = None  # Note that if init_state is given, seed is overriden.
 
-    env = AdjustablePendulumEnv(render_mode=None,  # 'human',
+    env = AdjustablePendulumEnv(render_mode='human',  # None,
                                 g=g,
                                 max_speed=max_speed,
                                 max_torque=max_torque,
@@ -41,11 +41,13 @@ def pendulum_experiment():
     Q = 2 * np.identity(2)
     R = 2 * np.array([[1]])
     R_delta = np.array([[1]])
-    gamma = 1
+    gamma = -1
     horizon = 10
     state_dim = 2
     action_dim = 1
     mpc = RiskSensitiveMPC(gamma, horizon, state_dim, action_dim, Q, R, R_delta)
+    mpc.ub = [options['max_torque']]
+    mpc.lb = [-options['max_torque']]
 
     # Pretrain dynamics of MPC
     for i in range(state_dim):
