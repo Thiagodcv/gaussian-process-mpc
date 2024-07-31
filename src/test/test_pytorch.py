@@ -11,7 +11,10 @@ class TestPytorch(TestCase):
     def tearDown(self):
         pass
 
-    def test_pytorch(self):
+    def test_autograd_bug(self):
+        """
+        Try to recreate a bug I encountered having to do with the autograd graph.
+        """
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         x = torch.tensor([5.], requires_grad=True, device=device)
 
