@@ -55,9 +55,12 @@ class RiskSensitiveMPC:
         self.curr_cost = None
         self.curr_grad = None
         self.curr_state = None
+        self.backward_taken = False
+        self.curr_u = None
 
         # Save last optimal action trajectory to warm-start optimization in new timestep
-        self.last_traj = [0 for _ in range(self.horizon * self.input_dim)]
+        self.last_traj = np.random.standard_normal(size=(self.horizon * self.input_dim,))
+        # [0 for _ in range(self.horizon * self.input_dim)]
 
         # Upper- and lower-bounds on control input
         self.ub = [1e16 for _ in range(self.input_dim)]
@@ -153,11 +156,11 @@ class RiskSensitiveMPC:
 
         Parameters
         ----------
-        x: (horizon+1, state_dim) torch tensor
-            A trajectory of state means; Assume x[0, :] is the current state
+        x: list of length horizon+1 with (state_dim,) torch tensors
+            A trajectory of state means; Assume x[0] is the current state
         u: (horizon, input_dim) torch tensor
             A trajectory of inputs
-        sig: (horizon+1, state_dim, state_dim) torch tensor
+        sig: list of length horizon+1 with (state_dim, state_dim) torch tensor
             A trajectory of state covariance matrices
         x_ref: (state_dim,) torch tensor
             The reference (or setpoint) state
@@ -174,12 +177,13 @@ class RiskSensitiveMPC:
 
         cost = 0
         for i in range(self.horizon + 1):
-            cost += (1/self.gamma * torch.log(torch.linalg.det(torch.eye(self.state_dim, device=self.device) +
-                                                                 self.gamma * self.Q_tor @ sig[i, :, :])))
-            cost += (x[i, :] - x_ref) @ torch.linalg.inv(Q_inv + self.gamma * sig[i, :, :]) @ (x[i, :] - x_ref)
+            cost = cost + (1/self.gamma * torch.log(torch.linalg.det(torch.eye(self.state_dim, device=self.device) +
+                                                                 self.gamma * self.Q_tor @ sig[i])))
+            cost = cost + (x[i] - x_ref) @ torch.linalg.inv(Q_inv + self.gamma * sig[i]) @ (x[i] - x_ref)
+            # cost += (x[i, :] - x_ref) @ self.Q_tor @ (x[i, :] - x_ref)  # for testing purposes only
 
         for j in range(self.horizon):
-            cost += (u[j, :] - u_ref) @ self.R_tor @ (u[j, :] - u_ref)
+            cost = cost + (u[j, :] - u_ref) @ self.R_tor @ (u[j, :] - u_ref)
 
         if self.R_delta_tor is not None:
             last_u = torch.tensor(self.last_traj[0:self.input_dim], device=self.device).type(torch.float64)
@@ -188,7 +192,7 @@ class RiskSensitiveMPC:
             delta_u = torch.diff(u_expanded, dim=0)
 
             for j in range(self.horizon):
-                cost += delta_u[j, :] @ self.R_delta_tor @ delta_u[j, :]
+                cost = cost + delta_u[j, :] @ self.R_delta_tor @ delta_u[j, :]
 
         return cost
 
@@ -205,16 +209,19 @@ class RiskSensitiveMPC:
         -------
         scalar
         """
+        # print("objective")
+        # print("curr_x: ", x)
         u = torch.as_tensor(x.reshape(self.horizon, self.input_dim), device=self.device).type(torch.float64)
         u.requires_grad_(True)
         x_init = self.curr_state
 
         state_means, state_covars = self.dynamics.forward_propagate_torch(self.horizon, x_init, u)
         cost = self.cost_torch(state_means, u, state_covars, self.x_ref, self.u_ref)
-        cost.backward()
+        # print("mean states: ", state_means)
 
         self.curr_cost = cost
-        self.curr_grad = u.grad.cpu().detach().numpy()
+        self.curr_u = u
+        self.backward_taken = False
 
         return cost.item()
 
@@ -231,10 +238,18 @@ class RiskSensitiveMPC:
         -------
         scalar
         """
+        # print("gradient")
         if self.curr_cost is None:
             self.objective(x)
 
-        return self.curr_grad
+        if self.backward_taken:
+            return self.curr_grad
+        else:
+            self.curr_cost.backward(retain_graph=True)
+            self.backward_taken = True
+            self.curr_grad = self.curr_u.grad.cpu().detach().numpy()
+            # print("curr_grad: ", self.curr_grad)
+            return self.curr_grad
 
     def constraints(self, x):
         """
@@ -280,11 +295,22 @@ class RiskSensitiveMPC:
         )
 
         nlp.add_option('mu_strategy', 'adaptive')
-        nlp.add_option('tol', 1e-7)
+        nlp.add_option('accept_every_trial_step', 'yes')  # Disable line search
+        # nlp.add_option('limited_memory_update_type', 'bfgs')
+
+        # Trying to loosen convergence constraints to converge earlier... doesn't really seem to help
+        # nlp.add_option('max_iter', 10)  # default 3000
+        nlp.add_option('tol', 1e-4)  # default 1e-8
+        nlp.add_option('acceptable_tol', 1e-4)  # default 1e-6
+        nlp.add_option('constr_viol_tol', 1e-4)  # default 1e-8
+        nlp.add_option('compl_inf_tol', 1e-4)  # default 1e-8
+        nlp.add_option('dual_inf_tol', 1e-4)  # default 1e-8
+        nlp.add_option('mu_target', 1e-4)  # default 1e-6
+        nlp.add_option('acceptable_iter', 3)  # default 15
 
         # Hide banner and other output to STDOUT
-        nlp.add_option('sb', 'yes')
-        nlp.add_option('print_level', 0)
+        # nlp.add_option('sb', 'yes')
+        # nlp.add_option('print_level', 0)
 
         x, info = nlp.solve(x0)
         print('optimal solution:', x)

@@ -1,5 +1,6 @@
 from src.dynamics import Dynamics
 from src.models.pendulum import nom_model_th, nom_model_om, true_model_th, true_model_om, state_dim, action_dim
+from src.mpc import RiskSensitiveMPC
 from unittest import TestCase
 import numpy as np
 import torch
@@ -186,5 +187,83 @@ class TestDynamics(TestCase):
         # run_str = 'dynamics.forward_propagate_torch(horizon=horizon, curr_state=init_state, actions=torch.zeros((horizon, action_dim), device=device))'
         # cProfile.runctx(run_str, globals(), locals())
 
-        self.assertTrue(np.linalg.norm(state_means.cpu().detach().numpy() - state_means_np) < 1e-7)
-        self.assertTrue(np.linalg.norm(state_covars.cpu().detach().numpy() - state_covars_np) < 1e-7)
+        self.assertTrue(np.linalg.norm(state_means[0].cpu().detach().numpy() - state_means_np[0, :]) < 1e-7)
+        self.assertTrue(np.linalg.norm(state_means[1].cpu().detach().numpy() - state_means_np[1, :]) < 1e-7)
+        self.assertTrue(np.linalg.norm(state_means[2].cpu().detach().numpy() - state_means_np[2, :]) < 1e-7)
+
+        self.assertTrue(np.linalg.norm(state_covars[0].cpu().detach().numpy() - state_covars_np[0, :, :]) < 1e-7)
+        self.assertTrue(np.linalg.norm(state_covars[1].cpu().detach().numpy() - state_covars_np[1, :, :]) < 1e-7)
+        self.assertTrue(np.linalg.norm(state_covars[2].cpu().detach().numpy() - state_covars_np[2, :, :]) < 1e-7)
+
+    def test_forward_propagate_torch_mc(self):
+        """
+        Ensure Dynamics.forward_propagate_torch appears to match results from MC simulation. Note
+        that the results shouldn't necessarily be arbitrarily close for large N, since mean/variance/covariance_prop
+        methods are really just approximations when used recursively.
+        """
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        num_train = 30
+        s_min = -10
+        s_max = 10
+        a_min = -1
+        a_max = 1
+
+        def f(s, a):
+            return s + a
+
+        state = np.random.uniform(s_min, s_max, num_train)[:, None]
+        action = np.random.uniform(a_min, a_max, num_train)[:, None]
+
+        next_state = f(state, action)
+
+        Q = 2 * np.identity(1)
+        R = np.array([[0]])
+        R_delta = np.array([[0]])
+        gamma = 1e-5  # Negative gamma is risk-averse, positive gamma is risk-seeking
+        horizon = 5
+        state_dim = 1
+        action_dim = 1
+        mpc = RiskSensitiveMPC(gamma, horizon, state_dim, action_dim, Q, R, R_delta)
+
+        mpc.dynamics.gpr_err[0].set_sigma_n(1e-5)  # Recall method doesn't automatically make Ky get rebuilt
+        # TODO: sigma_f != 1 results diverge because prop algos assume sigma_f = 1
+        # mpc.dynamics.gpr_err[0].set_sigma_f(5.)
+        mpc.dynamics.gpr_err[0].set_lambdas([2., 2.])
+        mpc.dynamics.append_train_data(state, action, next_state)
+        mpc.set_ub([a_max])
+        mpc.set_lb([a_min])
+        mpc.set_xref(np.array([0.]))
+        mpc.set_uref(np.array([0.]))
+
+        curr_state = torch.tensor([5.], device=device).type(torch.float64)
+        actions = torch.tensor([-1, -1, -1, -1, -1], device=device)[:, None].type(torch.float64)
+
+        state_means, state_covars = mpc.dynamics.forward_propagate_torch(horizon=horizon,
+                                                                         curr_state=curr_state, actions=actions)
+
+        print("forward_prop means: ", torch.concatenate(state_means, axis=0).cpu().detach().numpy())
+        print("forward_prop vars: ", torch.concatenate(state_covars, axis=0).cpu().detach().numpy().flatten())
+
+        # MC Method
+        num_iters = 1000
+        x0_mean = curr_state.cpu().detach().numpy()
+        x0 = np.random.normal(loc=x0_mean, scale=np.sqrt(1e-3), size=num_iters)[None, :]
+        x_mat = np.zeros((horizon, num_iters))
+        x_mat = np.concatenate((x0, x_mat), axis=0)
+
+        actions_mean = actions.cpu().detach().numpy()  # Actually, actions also have a variance of 1e-3
+        actions = np.random.multivariate_normal(mean=actions_mean.flatten(),
+                                                cov=1e-3*np.identity(horizon),
+                                                size=num_iters).T
+
+        for i in range(horizon):
+            for j in range(num_iters):
+                z = np.concatenate((x_mat[i, j][None], actions[i, j][None]))
+                x_mean, x_var = mpc.dynamics.gpr_err[0].predict_latent_vars(z[None, :], covar=True, targets=True)
+                x_mat[i+1, j] = np.random.normal(loc=x_mean[0, 0], scale=np.sqrt(x_var[0, 0]))
+
+        x_means = np.mean(x_mat, axis=1)
+        x_vars = np.var(x_mat, axis=1)
+        print("MC means: ", x_means)
+        print("MC vars: ", x_vars)
+        # Results seem to be pretty close!

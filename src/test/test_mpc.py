@@ -122,15 +122,19 @@ class TestRiskSensitiveMPC(TestCase):
         mpc = RiskSensitiveMPC(gamma, horizon, state_dim, input_dim, Q, R)
 
         # Feed some data into dynamics object
-        state = np.array([[0., 0.],
-                          [1., 1.]])
-        action = np.array([[0., 0.],
-                           [0., 0.]])
-        next_state = np.array([[1., 1.],
-                               [2., 2.]])
+        # state = np.array([[0., 1.],
+        #                   [1., 2.]])
+        # action = np.array([[0., 0.],
+        #                    [0., 0.]])
+        # next_state = np.array([[1., 2.],
+        #                        [2., 3.]])
+        state = np.random.standard_normal(size=(2, 2))
+        action = np.random.standard_normal(size=(2, 2))
+        next_state = np.random.standard_normal(size=(2, 2))
         mpc.dynamics.append_train_data(state, action, next_state)
 
         curr_state = np.array([0., 0.])
+        torch.autograd.set_detect_anomaly(True)
         opt_traj = mpc.get_optimal_trajectory(curr_state)
         self.assertTrue(opt_traj.shape == (horizon, input_dim))
 
@@ -181,12 +185,12 @@ class TestRiskSensitiveMPC(TestCase):
         x_traj[1, :] = np.array([2, 2])
         x_traj[2, :] = np.array([3, 3])
         u_traj[0, :] = np.array([2, 2])
-        u_traj[0, :] = np.array([4, 4])
+        u_traj[1, :] = np.array([4, 4])
         sig_traj[0, :, :] = np.array([[1, 2],
                                       [3, 4]])
         sig_traj[1, :, :] = np.array([[5, 6],
                                       [7, 8]])
-        sig_traj[1, :, :] = np.array([[9, 10],
+        sig_traj[2, :, :] = np.array([[9, 10],
                                       [11, 12]])
         gamma = 1.1
 
@@ -198,7 +202,7 @@ class TestRiskSensitiveMPC(TestCase):
 
         # Manually compute cost
         cost = 0
-        cost += 1/gamma * np.log(np.linalg.det(np.identity(state_dim) + gamma * Q @ sig_traj[0, :, :]))
+        cost += 1 / gamma * np.log(np.linalg.det(np.identity(state_dim) + gamma * Q @ sig_traj[0, :, :]))
         cost += 1 / gamma * np.log(np.linalg.det(np.identity(state_dim) + gamma * Q @ sig_traj[1, :, :]))
         cost += 1 / gamma * np.log(np.linalg.det(np.identity(state_dim) + gamma * Q @ sig_traj[2, :, :]))
 
@@ -220,13 +224,118 @@ class TestRiskSensitiveMPC(TestCase):
         # Compute cost using torch
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         x_traj = torch.tensor(x_traj, device=device).to(torch.float64)
+        x_traj = [x_traj[0, :], x_traj[1, :], x_traj[2, :]]
+
         u_traj = torch.tensor(u_traj, device=device).to(torch.float64)
+
         sig_traj = torch.tensor(sig_traj, device=device).to(torch.float64)
+        sig_traj = [sig_traj[0, :, :], sig_traj[1, :, :], sig_traj[2, :, :]]
+
         x_ref = torch.tensor(x_ref, device=device).to(torch.float64)
         u_ref = torch.tensor(u_ref, device=device).to(torch.float64)
 
+        # Now mpc.last_traj is generated randomly, so set to zeros for test to still work
+        mpc.last_traj = [0 for _ in range(N_c * input_dim)]
         cost_torch = mpc.cost_torch(x_traj, u_traj, sig_traj, x_ref, u_ref)
 
         print(cost)
         print(cost_torch)
         self.assertTrue(np.linalg.norm(cost_torch.tolist() - cost) < 1e-6)
+
+    def test_state_cost(self):
+        """
+        Test RiskSensitiveMPC cost_torch() method when R = delta_R = 0.
+        """
+        horizon = 5
+        x_traj = np.array([5, 4, 3, 2, 1, 0])
+        sig_traj = np.array([1/6, 1/7, 1/8, 1/9, 1/10, 1/11])
+        cost_np = 0
+        for i in range(horizon + 1):
+            cost_np += -np.log(1-2*sig_traj[i]) + x_traj[i]**2 / (1/2 - sig_traj[i])
+        print(cost_np)
+
+        Q = 2 * np.identity(1)
+        R = np.array([[0]])
+        R_delta = np.array([[0]])
+        gamma = -1  # Negative gamma is risk-averse, positive gamma is risk-seeking
+        state_dim = 1
+        action_dim = 1
+        mpc = RiskSensitiveMPC(gamma, horizon, state_dim, action_dim, Q, R, R_delta)
+
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        x_traj = torch.tensor(x_traj, device=device).reshape(horizon+1, 1).type(torch.float64)
+        u_traj = torch.zeros(size=(horizon, 1), device=device).type(torch.float64)
+        sig_traj = torch.tensor(sig_traj, device=device).reshape(horizon+1, 1, 1).type(torch.float64)
+        x_ref = torch.zeros(1, device=device).type(torch.float64)
+        u_ref = torch.zeros(1, device=device).type(torch.float64)
+
+        cost = mpc.cost_torch(x_traj, u_traj, sig_traj, x_ref, u_ref)
+        print(cost.item())
+        self.assertTrue(np.abs(cost_np - cost.item()) < 1e-7)
+
+    def test_mpc_autograd(self):
+        """
+        Test if MPC autograd is functioning properly. It appears that it is, although when testing gradients
+        against finite-difference approximations, you can only set epsilon to be so small before machine
+        error begins to destroy the quality of the finite difference approx, and the results begin to diverge.
+        epsilon = 1e-2 leads to fd approx that is closest to pytorch gradients. We set -10 <= s <= 10 and -1 <= a <= 1.
+        """
+        num_train = 1000
+        s_min = -10
+        s_max = 10
+        a_min = -1
+        a_max = 1
+
+        def f(s, a):
+            return s + a
+
+        state = np.random.uniform(s_min, s_max, num_train)[:, None]
+        action = np.random.uniform(a_min, a_max, num_train)[:, None]
+
+        next_state = f(state, action)
+
+        Q = 2 * np.identity(1)
+        R = np.array([[1]])
+        R_delta = np.array([[0]])
+        gamma = 1e-5  # Negative gamma is risk-averse, positive gamma is risk-seeking
+        horizon = 3
+        state_dim = 1
+        action_dim = 1
+        mpc = RiskSensitiveMPC(gamma, horizon, state_dim, action_dim, Q, R, R_delta)
+
+        mpc.dynamics.gpr_err[0].set_sigma_n(1e-5)  # Recall method doesn't automatically make Ky get rebuilt
+        mpc.dynamics.gpr_err[0].set_lambdas([2., 2.])
+        mpc.dynamics.append_train_data(state, action, next_state)
+        mpc.set_ub([a_max])
+        mpc.set_lb([a_min])
+        mpc.set_xref(np.array([0.]))
+        mpc.set_uref(np.array([0.]))
+
+        curr_state = np.array([5.])
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        mpc.curr_state = torch.tensor(curr_state, device=device).type(torch.float64)
+        torch.autograd.set_detect_anomaly(True)
+
+        # It seems like when epsilon is made small, gradients & finite differences diverge due to machine error
+        epsilon = 1e-2
+        traj = np.array([-1., -1., -1.])  # FD & PyTorch agree for many different trajectories.
+        cost = mpc.objective(traj)
+        grad = mpc.gradient(traj)
+
+        traj_pert0 = traj.copy()
+        traj_pert0[0] += epsilon
+        cost_pert0 = mpc.objective(traj_pert0)
+        grad_finite_diff_0 = (cost_pert0 - cost)/epsilon
+
+        traj_pert1 = traj.copy()
+        traj_pert1[1] += epsilon
+        cost_pert1 = mpc.objective(traj_pert1)
+        grad_finite_diff_1 = (cost_pert1 - cost)/epsilon
+
+        traj_pert2 = traj.copy()
+        traj_pert2[2] += epsilon
+        cost_pert2 = mpc.objective(traj_pert2)
+        grad_finite_diff_2 = (cost_pert2 - cost)/epsilon
+
+        print("Finite difference gradient: ", [grad_finite_diff_0, grad_finite_diff_1, grad_finite_diff_2])
+        print("Autograd gradient: ", grad)
