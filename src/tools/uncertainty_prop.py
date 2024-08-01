@@ -289,8 +289,9 @@ def covariance_prop_mc(K1, K2, Lambda1, Lambda2, u, S, X_train, y_train):
 
 
 # Implementing Torch versions of mv_prop, var_prop, covar_prop
-def mean_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train):
+def mean_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train, sigma_f=1):
     """
+    TODO: Adjust for sigma_f
     Computes the mean of predictive distribution (21) using an exact formula. Assumes we are using Gaussian kernels.
 
     Parameters:
@@ -307,6 +308,8 @@ def mean_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train):
         GP training data inputs
     y_train: torch.tensor
         GP training data outputs
+    sigma_f: scalar
+        sigma_f parameter of the GP model
 
     Return:
     ------
@@ -322,13 +325,15 @@ def mean_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train):
     d = S.shape[0]
 
     gauss_cov = torch.sum(((u - X_train) @ S_Lambda_inv) * (u - X_train), dim=1)
-    l = (torch.linalg.det(Lambda_inv @ S + torch.eye(d, device=beta.device)) ** (-1/2)) * torch.exp(-1/2 * gauss_cov)
+    l = ((torch.linalg.det(Lambda_inv @ S + torch.eye(d, device=beta.device)) ** (-1/2)) *
+         torch.exp(-1/2 * gauss_cov) * sigma_f**2)
 
     return torch.dot(beta, l), {'beta': beta, 'l': l}
 
 
-def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, mean, beta):
+def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, mean, beta, sigma_f=1):
     """
+    TODO: Adjust for sigma_f
     Computes the variance of predictive distribution (21) using an exact formula.
     Assumes we are using Gaussian kernels.
 
@@ -350,6 +355,8 @@ def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, mean, beta):
         mean of predictive distribution of GP with uncertain input (equation 21)
     beta: torch.tensor
         vector used in dot-product to compute mean in (21)
+    sigma_f: scalar
+        sigma_f parameter of the GP model
 
     Return:
     ------
@@ -381,13 +388,14 @@ def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, mean, beta):
     Lambda_part = torch.exp((-1/4) * torch.square(dist_mat))
 
     # Compute entire L matrix
-    L = det_part * A_part * Lambda_part
+    L = det_part * A_part * Lambda_part * sigma_f**4
 
-    return 1 - torch.trace((Ky_inv - torch.outer(beta, beta)) @ L) - mean**2
+    return sigma_f**2 - torch.trace((Ky_inv - torch.outer(beta, beta)) @ L) - mean**2
 
 
 def covariance_prop_torch(lambdas1, lambdas2, u, S, X_train, mean1, mean2, beta1, beta2):
     """
+    TODO: Adjust for sigma_f
     Computes the covariance of GP outputs (A14) using an exact formula.
     Assumes we are using Gaussian kernels for both GP models 1 and 2.
 
