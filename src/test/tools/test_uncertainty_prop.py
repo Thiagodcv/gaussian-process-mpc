@@ -489,12 +489,14 @@ class TestUncertaintyProp(TestCase):
     def test_expectation_of_nominal_formula(self):
         """
         Test to see if approximate expectation formula works on pendulum equation.
+        From this test we see that for reasonably-sized covariance matrix, approximation formula
+        is significantly more accurate than simply plugging in u into f(u). 
         """
         mc_num = 1000
         u = np.array([5, 4, 1])
         S = np.array([[1., 0., 0.],
                       [0., 2, 0.],
-                      [0., 0., 1e-5]]) * 0.1
+                      [0., 0., 1e-5]]) * 0.5
         X = np.random.multivariate_normal(mean=u, cov=S, size=mc_num)
 
         def f(z):
