@@ -384,3 +384,104 @@ class TestUncertaintyProp(TestCase):
 
         print(np_covar)
         print(torch_covar)
+
+    def test_mean_var_covar_sigma_f(self):
+        """
+        Ensure mean/variance/covariance_prop_torch methods return the right result when GP model(s)
+        have sigma_f != 1.
+        """
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        num_train = 200
+
+        # Generate noise
+        sigma = 0.5
+        err = np.random.normal(loc=0, scale=sigma, size=num_train)
+
+        # True function is f(x) = x_1^2 + x_2^2
+        def f(x):
+            return x.T @ np.identity(2) @ x
+
+        # Generate 2D Gaussian TRAINING inputs
+        u = np.array([2., 1.])
+        S = np.array([[1., 0.5],
+                      [0.5, 2.]])
+        X_train = np.random.multivariate_normal(u, S, num_train)  # This might not be right
+
+        # Generate scalar outputs
+        y_train = np.array([f(X_train[j, :]) for j in range(num_train)]) + err
+
+        self.assertEqual(X_train.shape[0], num_train)
+        self.assertEqual(X_train.shape[1], 2)
+        self.assertEqual(y_train.shape[0], num_train)
+
+        # Generate kernel hyperparameters
+        lambdas1 = np.array([1., 1.])
+        lambdas2 = np.array([2., 2.])
+        Lambda1_inv = np.diag(1 / lambdas1)
+        Lambda2_inv = np.diag(1 / lambdas2)
+        sigma_f1 = 0.8
+        sigma_f2 = 1.5
+
+        def gauss_kern(x1, x2, Lambda_inv, sigma_f):
+            return (sigma_f**2) * np.exp(-1 / 2 * (x1 - x2).T @ Lambda_inv @ (x1 - x2))
+
+        # Define covariance matrices. Variance from noise term added to K as per equation (6). Forgetting to do so
+        # really messes up the conditioning on K and gives bad values for mean of predictive distribution.
+        K1 = np.zeros((num_train, num_train))
+        K2 = np.zeros((num_train, num_train))
+        for i in range(num_train):
+            for j in range(num_train):
+                K1[i, j] = gauss_kern(X_train[i, :], X_train[j, :], Lambda1_inv, sigma_f1)
+                K2[i, j] = gauss_kern(X_train[i, :], X_train[j, :], Lambda2_inv, sigma_f2)
+        Ky1 = K1 + (sigma ** 2) * np.identity(num_train)
+        Ky2 = K2 + (sigma ** 2) * np.identity(num_train)
+
+        self.assertTrue(np.linalg.norm(Ky1 - Ky1.T) < 1e-5)
+        self.assertEqual(Ky1.shape, (num_train, num_train))
+        self.assertTrue(np.linalg.norm(Ky2 - Ky2.T) < 1e-5)
+        self.assertEqual(Ky2.shape, (num_train, num_train))
+
+        mean_mc = mean_prop_mc(Ky1, np.diag(lambdas1), u, S, X_train, y_train, sigma_f1)
+        var_mc = variance_prop_mc(Ky1, np.diag(lambdas1), u, S, X_train, y_train, sigma_f1)
+        covar_mc = covariance_prop_mc(Ky1, Ky2, np.diag(lambdas1), np.diag(lambdas2), u, S,
+                                      X_train, y_train, sigma_f1, sigma_f2)
+
+        print("MC mean (GP1): ", mean_mc)
+        print("MC variance (GP1): ", var_mc)
+        print("MC covariance: ", covar_mc)
+
+        # Convert tensors to torch
+        X_train = torch.tensor(X_train, device=device)
+        y_train = torch.tensor(y_train, device=device)
+        lambdas1 = torch.tensor(lambdas1, device=device)
+        lambdas2 = torch.tensor(lambdas2, device=device)
+        u = torch.tensor(u, device=device)
+        S = torch.tensor(S, device=device)
+        Ky1 = torch.tensor(Ky1, device=device)
+        Ky2 = torch.tensor(Ky2, device=device)
+        Ky1_inv = torch.linalg.inv(Ky1)
+        Ky2_inv = torch.linalg.inv(Ky2)
+        torch_mu1, torch_dict1 = mean_prop_torch(Ky1_inv, lambdas1, u, S, X_train, y_train, sigma_f1)
+        torch_mu2, torch_dict2 = mean_prop_torch(Ky2_inv, lambdas2, u, S, X_train, y_train, sigma_f2)
+
+        var_torch = variance_prop_torch(Ky1_inv, lambdas1, u, S, X_train, torch_mu1, torch_dict1['beta'], sigma_f1)
+        covar_torch = covariance_prop_torch(lambdas1, lambdas2, u, S, X_train,
+                                            torch_mu1, torch_mu2,
+                                            torch_dict1['beta'], torch_dict2['beta'], sigma_f1, sigma_f2)
+
+        print("Torch mean (GP1): ", torch_mu1)
+        print("Torch variance (GP1): ", var_torch)
+        print("Torch covariance: ", covar_torch)
+
+        torch_mu1_incor, torch_dict1_incor = mean_prop_torch(Ky1_inv, lambdas1, u, S, X_train, y_train)
+        torch_mu2_incor, torch_dict2_incor = mean_prop_torch(Ky2_inv, lambdas2, u, S, X_train, y_train)
+
+        var_torch_incor = variance_prop_torch(Ky1_inv, lambdas1, u, S, X_train, torch_mu1_incor,
+                                              torch_dict1_incor['beta'])
+        covar_torch_incor = covariance_prop_torch(lambdas1, lambdas2, u, S, X_train,
+                                                  torch_mu1_incor, torch_mu2_incor,
+                                                  torch_dict1_incor['beta'], torch_dict2_incor['beta'])
+
+        print("Incorrect Torch mean (GP1): ", torch_mu1_incor)
+        print("Incorrect Torch variance (GP1): ", var_torch_incor)
+        print("Incorrect Torch covariance: ", covar_torch_incor)

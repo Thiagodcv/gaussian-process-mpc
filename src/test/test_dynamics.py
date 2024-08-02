@@ -226,8 +226,7 @@ class TestDynamics(TestCase):
         mpc = RiskSensitiveMPC(gamma, horizon, state_dim, action_dim, Q, R, R_delta)
 
         mpc.dynamics.gpr_err[0].set_sigma_n(1e-5)  # Recall method doesn't automatically make Ky get rebuilt
-        # TODO: sigma_f != 1 results diverge because prop algos assume sigma_f = 1
-        # mpc.dynamics.gpr_err[0].set_sigma_f(5.)
+        mpc.dynamics.gpr_err[0].set_sigma_f(5.)
         mpc.dynamics.gpr_err[0].set_lambdas([2., 2.])
         mpc.dynamics.append_train_data(state, action, next_state)
         mpc.set_ub([a_max])
@@ -245,7 +244,7 @@ class TestDynamics(TestCase):
         print("forward_prop vars: ", torch.concatenate(state_covars, axis=0).cpu().detach().numpy().flatten())
 
         # MC Method
-        num_iters = 1000
+        num_iters = 2000
         x0_mean = curr_state.cpu().detach().numpy()
         x0 = np.random.normal(loc=x0_mean, scale=np.sqrt(1e-3), size=num_iters)[None, :]
         x_mat = np.zeros((horizon, num_iters))
