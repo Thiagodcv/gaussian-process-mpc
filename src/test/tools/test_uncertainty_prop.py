@@ -436,8 +436,6 @@ class TestUncertaintyProp(TestCase):
         Ky1 = K1 + (sigma ** 2) * np.identity(num_train)
         Ky2 = K2 + (sigma ** 2) * np.identity(num_train)
 
-        # TODO: Continue from here
-
         self.assertTrue(np.linalg.norm(Ky1 - Ky1.T) < 1e-5)
         self.assertEqual(Ky1.shape, (num_train, num_train))
         self.assertTrue(np.linalg.norm(Ky2 - Ky2.T) < 1e-5)
