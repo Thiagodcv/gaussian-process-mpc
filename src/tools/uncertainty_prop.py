@@ -295,7 +295,7 @@ def covariance_prop_mc(K1, K2, Lambda1, Lambda2, u, S, X_train, y_train, sigma_f
 
 
 # Implementing Torch versions of mv_prop, var_prop, covar_prop
-def mean_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train, sigma_f=1):
+def mean_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train, sigma_f=1, nom_model=None, nom_model_hess=None):
     """
     Computes the mean of predictive distribution (21) using an exact formula. Assumes we are using Gaussian kernels.
 
@@ -315,6 +315,10 @@ def mean_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train, sigma_f=1):
         GP training data outputs
     sigma_f: scalar
         sigma_f parameter of the GP model
+    nom_model: function or None
+        Scalar function with input-size u, or None if nominal model not being used
+    nom_model_hess: function or None
+        Hessian of scalar function with input-size u, or None if nominal model not being used
 
     Return:
     ------
@@ -323,7 +327,12 @@ def mean_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train, sigma_f=1):
     dict
         Dictionary containing beta and l (equation 31)
     """
-    beta = Ky_inv @ y_train  # TODO: if only one datapoint fed into dynamics, y_train is 0D and this fails
+    # TODO: if only one datapoint fed into dynamics, y_train is 0D and this fails
+    if nom_model is None:
+        beta = Ky_inv @ y_train
+    else:
+        beta = Ky_inv @ (y_train - nom_model(X_train))
+
     Lambda = torch.diag(lambdas)
     Lambda_inv = torch.diag(1/lambdas)
     S_Lambda_inv = torch.linalg.inv(S + Lambda)
@@ -333,7 +342,10 @@ def mean_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train, sigma_f=1):
     l = ((torch.linalg.det(Lambda_inv @ S + torch.eye(d, device=beta.device)) ** (-1/2)) *
          torch.exp(-1/2 * gauss_cov) * sigma_f**2)
 
-    return torch.dot(beta, l), {'beta': beta, 'l': l}
+    if nom_model is None:
+        return torch.dot(beta, l), {'beta': beta, 'l': l}
+    else:
+        return nom_model(u) + 1/2 * torch.trace(nom_model_hess(u) @ S) + torch.dot(beta, l), {'beta': beta, 'l': l}
 
 
 def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, mean, beta, sigma_f=1):
