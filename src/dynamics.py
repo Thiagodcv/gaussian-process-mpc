@@ -126,7 +126,6 @@ class Dynamics(object):
         TODO: nominal models aren't taken into account here. Try to see if this can be remedied.
         TODO: Figure out why CUDA runs out of memory for large num_train.
         TODO: Figure out why covariance_prop_torch is much slower than for variance_prop_torch.
-        TODO: (mean/cov/var)_prop_torch all assume sigma_f = 1. Modify for general sigma_f.
         Given `horizon` number of actions, compute the expected states and state covariances.
         Note that because this method only takes actions as arguments (and not states), this method
         corresponds to a shooting method. This is implemented using Torch instead of NumPy.
@@ -170,13 +169,15 @@ class Dynamics(object):
                 Ky_inv = self.gpr_err[s_dim].Ky_inv.detach()
                 lambdas = torch.exp(self.gpr_err[s_dim].log_lambdas).detach()
                 y_train = self.gpr_err[s_dim].y_train  # Each GPR has different y_train
+                sigma_f = self.gpr_err[s_dim].get_sigma_f()
 
-                mean_elem, mp_dict = mean_prop_torch(Ky_inv, lambdas, mean, covar, X_train, y_train.squeeze())
+                mean_elem, mp_dict = mean_prop_torch(Ky_inv, lambdas, mean, covar, X_train, y_train.squeeze(), sigma_f)
                 new_mean.append(mean_elem)
                 betas.append(mp_dict['beta'])
 
                 # compute variances for each state dimension
-                var_elem = variance_prop_torch(Ky_inv, lambdas, mean, covar, X_train, new_mean[s_dim], betas[s_dim])
+                var_elem = variance_prop_torch(Ky_inv, lambdas, mean, covar, X_train,
+                                               new_mean[s_dim], betas[s_dim], sigma_f)
                 new_var.append(var_elem)
 
             # TODO: So far, only paying attention to mean and variance. Implement covariance.

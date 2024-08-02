@@ -36,6 +36,7 @@ def test_experiment():
 
     mpc.dynamics.gpr_err[0].set_sigma_n(1e-5)  # Recall method doesn't automatically make Ky get rebuilt
     mpc.dynamics.gpr_err[0].set_lambdas([2., 2.])
+    mpc.dynamics.gpr_err[0].set_sigma_f(3.)
     mpc.dynamics.append_train_data(state, action, next_state)
     mpc.set_ub([a_max])
     mpc.set_lb([a_min])

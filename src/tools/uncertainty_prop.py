@@ -297,7 +297,6 @@ def covariance_prop_mc(K1, K2, Lambda1, Lambda2, u, S, X_train, y_train, sigma_f
 # Implementing Torch versions of mv_prop, var_prop, covar_prop
 def mean_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train, sigma_f=1):
     """
-    TODO: Adjust for sigma_f
     Computes the mean of predictive distribution (21) using an exact formula. Assumes we are using Gaussian kernels.
 
     Parameters:
@@ -339,7 +338,6 @@ def mean_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train, sigma_f=1):
 
 def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, mean, beta, sigma_f=1):
     """
-    TODO: Adjust for sigma_f
     Computes the variance of predictive distribution (21) using an exact formula.
     Assumes we are using Gaussian kernels.
 
@@ -401,7 +399,6 @@ def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, mean, beta, sigma_f=1):
 
 def covariance_prop_torch(lambdas1, lambdas2, u, S, X_train, mean1, mean2, beta1, beta2, sigma_f1=1, sigma_f2=1):
     """
-    TODO: Adjust for sigma_f
     Computes the covariance of GP outputs (A14) using an exact formula.
     Assumes we are using Gaussian kernels for both GP models 1 and 2.
 
