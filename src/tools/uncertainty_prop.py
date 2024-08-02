@@ -46,7 +46,7 @@ def mean_prop(K, Lambda, u, S, X_train, y_train):
     return np.dot(beta, l), {'beta': beta, 'l': l}
 
 
-def mean_prop_mc(K, Lambda, u, S, X_train, y_train):
+def mean_prop_mc(K, Lambda, u, S, X_train, y_train, sigma_f=1):
     """
     Computes the mean of predictive distribution (21) using Monte Carlo.
     Assumes we are using Gaussian kernels.
@@ -65,6 +65,8 @@ def mean_prop_mc(K, Lambda, u, S, X_train, y_train):
         GP training data inputs
     y_train: scalar
         GP training data outputs
+    sigma_f: scalar
+        sigma_f parameter of the GP model
 
     Return :
     ------
@@ -72,7 +74,7 @@ def mean_prop_mc(K, Lambda, u, S, X_train, y_train):
         Mean of predictive distribution of f
     """
     def gauss_kern(x1, x2):
-        return np.exp(-1/2 * (x1-x2).T @ np.linalg.inv(Lambda) @ (x1-x2))
+        return (sigma_f**2) * np.exp(-1/2 * (x1-x2).T @ np.linalg.inv(Lambda) @ (x1-x2))
 
     T = 10000
     X_star = np.random.multivariate_normal(u, S, size=T)
@@ -136,7 +138,7 @@ def variance_prop(K, Lambda, u, S, X_train, y_train):
     return 1 - np.trace((K_inv - np.outer(beta, beta)) @ L) - mean**2
 
 
-def variance_prop_mc(K, Lambda, u, S, X_train, y_train):
+def variance_prop_mc(K, Lambda, u, S, X_train, y_train, sigma_f=1):
     """
     Computes the variance of predictive distribution (21) using Monte Carlo.
     Assumes we are using Gaussian kernels.
@@ -155,6 +157,8 @@ def variance_prop_mc(K, Lambda, u, S, X_train, y_train):
        GP training data inputs
     y_train: scalar
        GP training data outputs
+    sigma_f: scalar
+        sigma_f parameter of the GP model
 
     Return :
     ------
@@ -162,7 +166,7 @@ def variance_prop_mc(K, Lambda, u, S, X_train, y_train):
        Variance of predictive distribution of f
     """
     def gauss_kern(x1, x2):
-        return np.exp(-1/2 * (x1-x2).T @ np.linalg.inv(Lambda) @ (x1-x2))
+        return (sigma_f**2) * np.exp(-1/2 * (x1-x2).T @ np.linalg.inv(Lambda) @ (x1-x2))
 
     T = 10000
     X_star = np.random.multivariate_normal(u, S, size=T)
@@ -174,7 +178,7 @@ def variance_prop_mc(K, Lambda, u, S, X_train, y_train):
     for t in range(T):
         k_vec = np.array([gauss_kern(X_star[t, :], X_train[n, :]) for n in range(num_train)])
         mu = k_vec.T @ K_inv @ y_train
-        sig_sq = 1 - k_vec.T @ K_inv @ k_vec
+        sig_sq = sigma_f**2 - k_vec.T @ K_inv @ k_vec
 
         mu_list.append(mu)
         sig_sq_list.append(sig_sq)
@@ -234,7 +238,7 @@ def covariance_prop(K1, K2, Lambda1, Lambda2, u, S, X_train, y_train):
     return beta1.T @ Q_tilde @ beta2 - mean1 * mean2
 
 
-def covariance_prop_mc(K1, K2, Lambda1, Lambda2, u, S, X_train, y_train):
+def covariance_prop_mc(K1, K2, Lambda1, Lambda2, u, S, X_train, y_train, sigma_f1=1, sigma_f2=1):
     """
     Computes the covariance of GP outputs (A14) using Monte Carlo.
     Assumes we are using Gaussian kernels for both GP models 1 and 2.
@@ -253,6 +257,8 @@ def covariance_prop_mc(K1, K2, Lambda1, Lambda2, u, S, X_train, y_train):
        GP training data inputs
     y_train: scalar
        GP training data outputs
+    sigma_f: scalar
+        sigma_f parameter of the GP model
 
     Return :
     ------
@@ -264,8 +270,8 @@ def covariance_prop_mc(K1, K2, Lambda1, Lambda2, u, S, X_train, y_train):
     Lambda1_inv = np.linalg.inv(Lambda1)
     Lambda2_inv = np.linalg.inv(Lambda2)
 
-    def gauss_kern(x1, x2, Lambda_inv):
-        return np.exp(-1/2 * (x1-x2).T @ Lambda_inv @ (x1-x2))
+    def gauss_kern(x1, x2, Lambda_inv, sigma_f):
+        return (sigma_f**2) * np.exp(-1/2 * (x1-x2).T @ Lambda_inv @ (x1-x2))
 
     T = 10000
     X_star = np.random.multivariate_normal(u, S, size=T)
@@ -274,12 +280,12 @@ def covariance_prop_mc(K1, K2, Lambda1, Lambda2, u, S, X_train, y_train):
     f1_list = []
     f2_list = []
     for t in range(T):
-        k1_vec = np.array([gauss_kern(X_star[t, :], X_train[n, :], Lambda1_inv) for n in range(num_train)])
-        k2_vec = np.array([gauss_kern(X_star[t, :], X_train[n, :], Lambda2_inv) for n in range(num_train)])
+        k1_vec = np.array([gauss_kern(X_star[t, :], X_train[n, :], Lambda1_inv, sigma_f1) for n in range(num_train)])
+        k2_vec = np.array([gauss_kern(X_star[t, :], X_train[n, :], Lambda2_inv, sigma_f2) for n in range(num_train)])
         mu1 = k1_vec @ K1_inv @ y_train
         mu2 = k2_vec @ K2_inv @ y_train
-        sigma1 = np.sqrt(1 - k1_vec @ K1_inv @ k1_vec)
-        sigma2 = np.sqrt(1 - k2_vec @ K2_inv @ k2_vec)
+        sigma1 = np.sqrt(sigma_f1**2 - k1_vec @ K1_inv @ k1_vec)
+        sigma2 = np.sqrt(sigma_f2**2 - k2_vec @ K2_inv @ k2_vec)
         f1 = np.random.normal(loc=mu1, scale=sigma1)
         f2 = np.random.normal(loc=mu2, scale=sigma2)
         f1_list.append(f1)
@@ -393,7 +399,7 @@ def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, mean, beta, sigma_f=1):
     return sigma_f**2 - torch.trace((Ky_inv - torch.outer(beta, beta)) @ L) - mean**2
 
 
-def covariance_prop_torch(lambdas1, lambdas2, u, S, X_train, mean1, mean2, beta1, beta2):
+def covariance_prop_torch(lambdas1, lambdas2, u, S, X_train, mean1, mean2, beta1, beta2, sigma_f1=1, sigma_f2=1):
     """
     TODO: Adjust for sigma_f
     Computes the covariance of GP outputs (A14) using an exact formula.
@@ -417,6 +423,8 @@ def covariance_prop_torch(lambdas1, lambdas2, u, S, X_train, mean1, mean2, beta1
         mean of predictive distribution of GP with uncertain input (equation 21)
     beta1 & beta2: torch.tensor
         vector used in dot-product to compute mean in (21)
+    sigma_f1 & sigma_f2: scalar
+        sigma_f parameters of the GP models
 
     Return :
     ------
@@ -452,7 +460,7 @@ def covariance_prop_torch(lambdas1, lambdas2, u, S, X_train, mean1, mean2, beta1
     dist_mat2 = torch.cdist(X_train_mod2, u_mod2[None, :], p=2)
     k2 = torch.square(dist_mat2)
 
-    cov_part = torch.exp((-1/2)*(k1 + k2.mT))
+    cov_part = torch.exp((-1/2)*(k1 + k2.mT)) * (sigma_f1**2) * (sigma_f2**2)
     Q_tilde = det_part * cov_part * exp_part
 
     return beta1 @ Q_tilde @ beta2 - mean1 * mean2
