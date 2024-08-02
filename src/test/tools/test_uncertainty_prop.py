@@ -485,3 +485,30 @@ class TestUncertaintyProp(TestCase):
         print("Incorrect Torch mean (GP1): ", torch_mu1_incor)
         print("Incorrect Torch variance (GP1): ", var_torch_incor)
         print("Incorrect Torch covariance: ", covar_torch_incor)
+
+    def test_expectation_of_nominal_formula(self):
+        """
+        Test to see if approximate expectation formula works on pendulum equation.
+        """
+        mc_num = 1000
+        u = np.array([5, 4, 1])
+        S = np.array([[1., 0., 0.],
+                      [0., 2, 0.],
+                      [0., 0., 1e-5]]) * 0.1
+        X = np.random.multivariate_normal(mean=u, cov=S, size=mc_num)
+
+        def f(z):
+            return z[1] + 15*np.sin(z[0]) + 0.15*z[2]
+
+        def f_hess(z):
+            hess = np.zeros(shape=(3, 3))
+            hess[0, 0] = -15 * np.sin(z[0])
+            return hess
+
+        f_mc_vals = [f(X[i, :]) for i in range(mc_num)]
+        f_mc_mean = np.mean(f_mc_vals)
+        f_formula_mean = f(u) + 1/2*np.trace(f_hess(u) @ S)
+
+        print("Approximate mean of f(x) using MC: ", f_mc_mean)
+        print("Approximate mean of f(x) using formula: ", f_formula_mean)
+        print("f(u): ", f(u))
