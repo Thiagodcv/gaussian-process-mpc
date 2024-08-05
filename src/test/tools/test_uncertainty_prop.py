@@ -486,27 +486,32 @@ class TestUncertaintyProp(TestCase):
         print("Incorrect Torch variance (GP1): ", var_torch_incor)
         print("Incorrect Torch covariance: ", covar_torch_incor)
 
-    def test_expectation_of_nominal_formula(self):
+    def test_expectation_and_variance_of_nominal_formula(self):
         """
         Test to see if approximate expectation formula works on pendulum equation.
         From this test we see that for reasonably-sized covariance matrix, approximation formula
         is significantly more accurate than simply plugging in u into f(u). 
         """
         mc_num = 1000
-        u = np.array([5, 4, 1])
+        u = np.array([1, 2, 1])  # Angle, angular velocity, and torque
         S = np.array([[1., 0., 0.],
                       [0., 2, 0.],
                       [0., 0., 1e-5]]) * 0.5
         X = np.random.multivariate_normal(mean=u, cov=S, size=mc_num)
 
         def f(z):
+            # Angular velocity at next timestep
             return z[1] + 15*np.sin(z[0]) + 0.15*z[2]
+
+        def f_grad(z):
+            return np.array([15*np.cos(z[0]), 1, 0.15])
 
         def f_hess(z):
             hess = np.zeros(shape=(3, 3))
             hess[0, 0] = -15 * np.sin(z[0])
             return hess
 
+        # First test for expectation of Gaussian input into nominal model, i.e. E[m(x*)|x*~N(u, S)]
         f_mc_vals = [f(X[i, :]) for i in range(mc_num)]
         f_mc_mean = np.mean(f_mc_vals)
         f_formula_mean = f(u) + 1/2*np.trace(f_hess(u) @ S)
@@ -514,3 +519,20 @@ class TestUncertaintyProp(TestCase):
         print("Approximate mean of f(x) using MC: ", f_mc_mean)
         print("Approximate mean of f(x) using formula: ", f_formula_mean)
         print("f(u): ", f(u))
+
+        # Now test for variance of Gaussian input into nominal model, i.e. Var[m(x*)|x*~N(u, S)]
+        # TODO: Find a better approximation for variance of Gaussian input. This only really works for super
+        # TODO: "small" variances, so wouldn't work in practice.
+        f_mc_var = np.var(f_mc_vals)
+
+        f_squared_hess = 2*(np.outer(f_grad(u), f_grad(u)) + f(u) * f_hess(u))
+        f_squared_formula_mean = f(u)**2 + 1/2*np.trace(f_squared_hess @ S)
+        f_formula_var = f_squared_formula_mean - f_formula_mean**2
+
+        print("Approximate variance of f(x) using MC: ", f_mc_var)
+        print("Approximate variance of f(x) using formula: ", f_formula_var)
+
+        # Turns out ChatGPT's suggestion was just the variance of the linear approximation of f(x)
+        print("ChatGPT's suggestion: ", f_grad(u) @ S @ f_grad(u))
+        a = np.array([15*np.cos(u[0]), 1, 0.15])
+        print("Variance of linear approximation of f(x): ", a.T @ S @ a)
