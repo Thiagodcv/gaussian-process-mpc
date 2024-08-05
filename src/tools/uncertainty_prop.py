@@ -348,7 +348,7 @@ def mean_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train, sigma_f=1, nom_mode
         return nom_model(u) + 1/2 * torch.trace(nom_model_hess(u) @ S) + torch.dot(beta, l), {'beta': beta, 'l': l}
 
 
-def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, mean, beta, sigma_f=1):
+def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, mean, beta, sigma_f=1, nom_model_grad=None):
     """
     Computes the variance of predictive distribution (21) using an exact formula.
     Assumes we are using Gaussian kernels.
@@ -406,6 +406,10 @@ def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, mean, beta, sigma_f=1):
     # Compute entire L matrix
     L = det_part * A_part * Lambda_part * sigma_f**4
 
+    if nom_model_grad is not None:
+        var_nom_model = nom_model_grad(u).T @ S @ nom_model_grad(u)
+        return sigma_f**2 - torch.trace((Ky_inv - torch.outer(beta, beta)) @ L) - mean**2 + var_nom_model
+
     return sigma_f**2 - torch.trace((Ky_inv - torch.outer(beta, beta)) @ L) - mean**2
 
 
@@ -413,6 +417,8 @@ def covariance_prop_torch(lambdas1, lambdas2, u, S, X_train, mean1, mean2, beta1
     """
     Computes the covariance of GP outputs (A14) using an exact formula.
     Assumes we are using Gaussian kernels for both GP models 1 and 2.
+
+    NOTE: functionality for nominal models not implemented in this function.
 
     Parameters:
     ----------
