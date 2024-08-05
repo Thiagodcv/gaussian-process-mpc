@@ -521,8 +521,6 @@ class TestUncertaintyProp(TestCase):
         print("f(u): ", f(u))
 
         # Now test for variance of Gaussian input into nominal model, i.e. Var[m(x*)|x*~N(u, S)]
-        # TODO: Find a better approximation for variance of Gaussian input. This only really works for super
-        # TODO: "small" variances, so wouldn't work in practice.
         f_mc_var = np.var(f_mc_vals)
 
         f_squared_hess = 2*(np.outer(f_grad(u), f_grad(u)) + f(u) * f_hess(u))
@@ -536,3 +534,10 @@ class TestUncertaintyProp(TestCase):
         print("ChatGPT's suggestion: ", f_grad(u) @ S @ f_grad(u))
         a = np.array([15*np.cos(u[0]), 1, 0.15])
         print("Variance of linear approximation of f(x): ", a.T @ S @ a)
+
+    def test_mean_prop_nom_model(self):
+        """
+        Test mean_prop_torch() function when applying a nominal model.
+        """
+        pass
+    
