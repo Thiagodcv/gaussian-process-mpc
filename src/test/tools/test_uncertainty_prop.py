@@ -537,7 +537,76 @@ class TestUncertaintyProp(TestCase):
 
     def test_mean_prop_nom_model(self):
         """
-        Test mean_prop_torch() function when applying a nominal model.
+        Test mean_prop_torch() function when applying a nominal model. Let nominal model be
+        f(x) = x_1^2 + 2*x_2^2, and let the true model be g(x) = 1.5*x_1^2 + 2.5*x_2^2.
         """
-        pass
-    
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        num_train = 500
+
+        # Generate noise
+        sigma = 0.5
+        err = np.random.normal(loc=0, scale=sigma, size=num_train)
+
+        def f_nom(x):
+            if len(x.shape) <= 1:
+                return x[0]**2 + 2*x[1]**2
+            else:
+                return x[:, 0]**2 + 2*x[:, 1]**2
+
+        def f_nom_grad(x):
+            A = torch.tensor([[2, 0],
+                              [0, 4]], device=device).type(torch.float64)
+            return A @ x
+
+        def f_nom_hess(x):
+            A = torch.tensor([[2, 0],
+                              [0, 4]], device=device).type(torch.float64)
+            return A
+
+        def g_nom(x):
+            return 1.5*x[0]**2 + 2.5*x[1]**2
+
+        # Generate 2D Gaussian TRAINING inputs
+        u = np.array([2., 1.])
+        S = np.array([[1., 0.],
+                      [0., 2.]]) * 0.1
+        X_train = np.random.multivariate_normal(u, S, num_train)
+
+        # Generate scalar outputs
+        y_train = np.array([g_nom(X_train[j, :]) for j in range(num_train)]) + err
+
+        self.assertEqual(X_train.shape[0], num_train)
+        self.assertEqual(X_train.shape[1], 2)
+        self.assertEqual(y_train.shape[0], num_train)
+
+        # Generate kernel hyperparameters
+        lambdas = np.array([2., 2.])
+
+        def gauss_kern(x1, x2):
+            return np.exp(-1 / 2 * (x1 - x2).T @ np.diag(1 / lambdas) @ (x1 - x2))
+
+        # Define covariance matrix. Variance from noise term added to K as per equation (6). Forgetting to do so
+        # really messes up the conditioning on K and gives bad values for mean of predictive distribution.
+        K = np.zeros((num_train, num_train))
+        for i in range(num_train):
+            for j in range(num_train):
+                K[i, j] = gauss_kern(X_train[i, :], X_train[j, :])
+        Ky = K + (sigma ** 2) * np.identity(num_train)
+
+        self.assertTrue(np.linalg.norm(Ky - Ky.T) < 1e-5)
+        self.assertEqual(K.shape, (num_train, num_train))
+
+        # Convert tensors to torch
+        X_train = torch.tensor(X_train, device=device)
+        y_train = torch.tensor(y_train, device=device)
+        lambdas = torch.tensor(lambdas, device=device)
+        u = torch.tensor(u, device=device)
+        S = torch.tensor(S, device=device)
+        Ky = torch.tensor(Ky, device=device)
+        Ky_inv = torch.linalg.inv(Ky)
+        torch_mu, torch_dict = mean_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train,
+                                               nom_model=f_nom, nom_model_hess=f_nom_hess)
+        print(torch_mu)
+
+        # Now estimate E[mu(x*)|x*~N(u,S)] using MC method
+        print(g_nom(u))
