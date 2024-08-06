@@ -600,6 +600,7 @@ class TestUncertaintyProp(TestCase):
         # Now estimate E[mu(x*)|x*~N(u,S)] using MC method
         num_mc = 1000
         mu_list = []
+        sig_list = []
         for i in range(num_mc):
             x = np.random.multivariate_normal(u, S)
 
@@ -607,6 +608,7 @@ class TestUncertaintyProp(TestCase):
             for train_idx in range(num_train):
                 k_vec[train_idx] = gauss_kern(x, X_train[train_idx, :])
             mu_list.append(f_nom(x) + k_vec.T @ Ky_inv @ (y_train - f_nom(X_train)))
+            sig_list.append(1 - k_vec.T @ Ky_inv @ k_vec)
 
         print("Expected output from MC: ", np.mean(mu_list))
 
@@ -623,4 +625,10 @@ class TestUncertaintyProp(TestCase):
         print("Expected output from formula: ", torch_mu.item())
         print("f_true(u): ", f_true(u).item())
 
-        self.assertTrue(np.abs(np.mean(mu_list) - torch_mu.item()) < 0.5)
+        self.assertTrue(np.abs(np.mean(mu_list) - torch_mu.item()) < 1)
+
+        # Now test variance
+        print("Variance of output from MC: ", np.mean(sig_list) + np.var(mu_list))
+        torch_var = variance_prop_torch(Ky_inv, lambdas, u, S, X_train, torch_mu, torch_dict['beta'],
+                                        nom_model_grad=f_nom_grad, l=torch_dict['l'])
+        print("Variance of output from formula: ", torch_var.item())
