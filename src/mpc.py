@@ -319,11 +319,11 @@ class RiskSensitiveMPC:
         nlp.add_option('acceptable_iter', 3)  # default 15
 
         # Hide banner and other output to STDOUT
-        # nlp.add_option('sb', 'yes')
-        # nlp.add_option('print_level', 0)
+        nlp.add_option('sb', 'yes')
+        nlp.add_option('print_level', 0)
 
         x, info = nlp.solve(x0)
-        print('optimal solution:', x)
+        # print('optimal solution:', x)
 
         self.last_traj = x
         return np.reshape(x, (self.horizon, self.input_dim))

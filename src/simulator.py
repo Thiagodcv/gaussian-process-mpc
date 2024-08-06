@@ -25,10 +25,10 @@ class Simulator(object):
         """
         obs, info = self.env.reset()
         for t in range(self.num_iters):
-            print("state: ", obs)
             action = self.mpc.get_optimal_trajectory(obs)[0, :]
             next_obs, reward, terminated, truncated, _ = self.env.step(action)
-            print("Timestep {}: Reward: {:.2f}".format(t, reward))
+            # print("state: ", obs)
+            # print("Timestep {}: Reward: {:.2f}".format(t, reward))
 
             if terminated or truncated:
                 break
