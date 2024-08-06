@@ -544,7 +544,7 @@ class TestUncertaintyProp(TestCase):
         num_train = 500
 
         # Generate noise
-        sigma = 0.5
+        sigma = 1e-2
         err = np.random.normal(loc=0, scale=sigma, size=num_train)
 
         def f_nom(x):
@@ -563,17 +563,17 @@ class TestUncertaintyProp(TestCase):
                               [0, 4]], device=device).type(torch.float64)
             return A
 
-        def g_nom(x):
+        def f_true(x):
             return 1.5*x[0]**2 + 2.5*x[1]**2
 
         # Generate 2D Gaussian TRAINING inputs
         u = np.array([2., 1.])
         S = np.array([[1., 0.],
-                      [0., 2.]]) * 0.1
+                      [0., 2.]]) * 0.5
         X_train = np.random.multivariate_normal(u, S, num_train)
 
         # Generate scalar outputs
-        y_train = np.array([g_nom(X_train[j, :]) for j in range(num_train)]) + err
+        y_train = np.array([f_true(X_train[j, :]) for j in range(num_train)]) + err
 
         self.assertEqual(X_train.shape[0], num_train)
         self.assertEqual(X_train.shape[1], 2)
@@ -592,9 +592,23 @@ class TestUncertaintyProp(TestCase):
             for j in range(num_train):
                 K[i, j] = gauss_kern(X_train[i, :], X_train[j, :])
         Ky = K + (sigma ** 2) * np.identity(num_train)
+        Ky_inv = np.linalg.inv(Ky)
 
         self.assertTrue(np.linalg.norm(Ky - Ky.T) < 1e-5)
         self.assertEqual(K.shape, (num_train, num_train))
+
+        # Now estimate E[mu(x*)|x*~N(u,S)] using MC method
+        num_mc = 1000
+        mu_list = []
+        for i in range(num_mc):
+            x = np.random.multivariate_normal(u, S)
+
+            k_vec = np.ones(shape=(num_train,))
+            for train_idx in range(num_train):
+                k_vec[train_idx] = gauss_kern(x, X_train[train_idx, :])
+            mu_list.append(f_nom(x) + k_vec.T @ Ky_inv @ (y_train - f_nom(X_train)))
+
+        print("Expected output from MC: ", np.mean(mu_list))
 
         # Convert tensors to torch
         X_train = torch.tensor(X_train, device=device)
@@ -606,7 +620,7 @@ class TestUncertaintyProp(TestCase):
         Ky_inv = torch.linalg.inv(Ky)
         torch_mu, torch_dict = mean_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train,
                                                nom_model=f_nom, nom_model_hess=f_nom_hess)
-        print(torch_mu)
+        print("Expected output from formula: ", torch_mu.item())
+        print("f_true(u): ", f_true(u).item())
 
-        # Now estimate E[mu(x*)|x*~N(u,S)] using MC method
-        print(g_nom(u))
+        self.assertTrue(np.abs(np.mean(mu_list) - torch_mu.item()) < 0.5)
