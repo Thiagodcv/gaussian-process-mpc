@@ -348,7 +348,7 @@ def mean_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train, sigma_f=1, nom_mode
         return nom_model(u) + 1/2 * torch.trace(nom_model_hess(u) @ S) + torch.dot(beta, l), {'beta': beta, 'l': l}
 
 
-def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, mean, beta, sigma_f=1, nom_model_grad=None):
+def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, mean, beta, sigma_f=1, nom_model_grad=None, l=None):
     """
     Computes the variance of predictive distribution (21) using an exact formula.
     Assumes we are using Gaussian kernels.
@@ -373,6 +373,10 @@ def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, mean, beta, sigma_f=1, n
         vector used in dot-product to compute mean in (21)
     sigma_f: scalar
         sigma_f parameter of the GP model
+    nom_model_grad: function or None
+        Gradient of scalar function with input-size u, or None if nominal model not being used
+    l: 1D torch tensor or None
+        'l' as computed in mean_prop_torch
 
     Return:
     ------
@@ -407,8 +411,8 @@ def variance_prop_torch(Ky_inv, lambdas, u, S, X_train, mean, beta, sigma_f=1, n
     L = det_part * A_part * Lambda_part * sigma_f**4
 
     if nom_model_grad is not None:
-        var_nom_model = nom_model_grad(u).T @ S @ nom_model_grad(u)
-        return sigma_f**2 - torch.trace((Ky_inv - torch.outer(beta, beta)) @ L) - mean**2 + var_nom_model
+        var_nom_model = nom_model_grad(u) @ S @ nom_model_grad(u)
+        return sigma_f**2 - torch.trace((Ky_inv - torch.outer(beta, beta)) @ L) - (beta @ l)**2 + var_nom_model
 
     return sigma_f**2 - torch.trace((Ky_inv - torch.outer(beta, beta)) @ L) - mean**2
 
