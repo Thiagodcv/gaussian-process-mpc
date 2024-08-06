@@ -632,3 +632,75 @@ class TestUncertaintyProp(TestCase):
         torch_var = variance_prop_torch(Ky_inv, lambdas, u, S, X_train, torch_mu, torch_dict['beta'],
                                         nom_model_grad=f_nom_grad, l=torch_dict['l'])
         print("Variance of output from formula: ", torch_var.item())
+
+    def test_covariance_term_magnitude(self):
+        """
+        See how large the magnitude of the covariance term ignored in the computation in variance_prop_torch
+        in the test above is.
+        """
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        num_train = 500
+
+        # Generate noise
+        sigma = 1e-2
+        err = np.random.normal(loc=0, scale=sigma, size=num_train)
+
+        def f_nom(x):
+            if len(x.shape) <= 1:
+                return x[0]**2 + 2*x[1]**2
+            else:
+                return x[:, 0]**2 + 2*x[:, 1]**2
+
+        def f_nom_grad(x):
+            A = torch.tensor([[2, 0],
+                              [0, 4]], device=device).type(torch.float64)
+            return A @ x
+
+        def f_true(x):
+            return 1.5*x[0]**2 + 2.5*x[1]**2
+
+        # Generate 2D Gaussian TRAINING inputs
+        u = np.array([2., 1.])
+        S = np.array([[1., 0.],
+                      [0., 2.]]) * 0.5
+        X_train = np.random.multivariate_normal(u, S, num_train)
+
+        # Generate scalar outputs
+        y_train = np.array([f_true(X_train[j, :]) for j in range(num_train)]) + err
+
+        self.assertEqual(X_train.shape[0], num_train)
+        self.assertEqual(X_train.shape[1], 2)
+        self.assertEqual(y_train.shape[0], num_train)
+
+        # Generate kernel hyperparameters
+        lambdas = np.array([2., 2.])
+
+        def gauss_kern(x1, x2):
+            return np.exp(-1 / 2 * (x1 - x2).T @ np.diag(1 / lambdas) @ (x1 - x2))
+
+        # Define covariance matrix. Variance from noise term added to K as per equation (6). Forgetting to do so
+        # really messes up the conditioning on K and gives bad values for mean of predictive distribution.
+        K = np.zeros((num_train, num_train))
+        for i in range(num_train):
+            for j in range(num_train):
+                K[i, j] = gauss_kern(X_train[i, :], X_train[j, :])
+        Ky = K + (sigma ** 2) * np.identity(num_train)
+        Ky_inv = np.linalg.inv(Ky)
+
+        self.assertTrue(np.linalg.norm(Ky - Ky.T) < 1e-5)
+        self.assertEqual(K.shape, (num_train, num_train))
+
+        nom_list = []
+        gpr_list = []
+        mc_num = 1000
+        for t in range(mc_num):
+            x = np.random.multivariate_normal(u, S)
+            nom_list.append(f_nom(x))
+
+            k_vec = np.ones(shape=(num_train,))
+            for train_idx in range(num_train):
+                k_vec[train_idx] = gauss_kern(x, X_train[train_idx, :])
+
+            gpr_list.append(k_vec.T @ Ky_inv @ (y_train - f_nom(X_train)))
+
+        print("Covariance: ", np.cov(nom_list, gpr_list)[0, 1])
