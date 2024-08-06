@@ -66,6 +66,9 @@ class RiskSensitiveMPC:
         self.ub = [1e16 for _ in range(self.input_dim)]
         self.lb = [-1e16 for _ in range(self.input_dim)]
 
+        # Set this variable to False once training data isn't empty
+        self.train_empty = True
+
     def set_ub(self, ub):
         """
         Set the upper bound on the control input.
@@ -278,6 +281,13 @@ class RiskSensitiveMPC:
         (horizon, input_dim) np.array
             The optimal action trajectory
         """
+        # If no training data, just return zero vector for optimal trajectory.
+        if self.train_empty:
+            if self.dynamics.gpr_err[0].num_train > 0:
+                self.train_empty = False
+            else:
+                return np.zeros((self.horizon, self.input_dim))
+
         self.curr_state = torch.tensor(curr_state, device=self.device).type(torch.float64)
         x0 = self.last_traj
 
