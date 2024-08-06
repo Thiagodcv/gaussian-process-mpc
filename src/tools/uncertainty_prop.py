@@ -323,7 +323,11 @@ def mean_prop_torch(Ky_inv, lambdas, u, S, X_train, y_train, sigma_f=1):
     dict
         Dictionary containing beta and l (equation 31)
     """
-    beta = Ky_inv @ y_train  # TODO: if only one datapoint fed into dynamics, y_train is 0D and this fails
+    if len(y_train.shape) == 0:
+        beta = Ky_inv.flatten() * y_train
+    else:
+        beta = Ky_inv @ y_train  # if only one datapoint fed into dynamics, y_train is 0D and this line fails
+
     Lambda = torch.diag(lambdas)
     Lambda_inv = torch.diag(1/lambdas)
     S_Lambda_inv = torch.linalg.inv(S + Lambda)

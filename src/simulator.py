@@ -25,17 +25,10 @@ class Simulator(object):
         """
         obs, info = self.env.reset()
         for t in range(self.num_iters):
-            print("state: ", obs)
-
-            # The GP model that I implemented is only well-defined when the training set has at least 2 observations.
-            # This is just a work-around for the time being. TODO: Fix this.
-            if t >= 2:
-                action = self.mpc.get_optimal_trajectory(obs)[0, :]
-            else:
-                action = np.zeros(self.mpc.input_dim)
-
+            action = self.mpc.get_optimal_trajectory(obs)[0, :]
             next_obs, reward, terminated, truncated, _ = self.env.step(action)
-            print("Timestep {}: Reward: {:.2f}".format(t, reward))
+            # print("state: ", obs)
+            # print("Timestep {}: Reward: {:.2f}".format(t, reward))
 
             if terminated or truncated:
                 break
