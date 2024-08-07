@@ -28,7 +28,7 @@ def pendulum_experiment():
     g = options['g']
     max_speed = options['max_speed']
     max_torque = options['max_torque']
-    init_state = {'th_init': 0, 'thdot_init': -1}
+    init_state = {'th_init': -1/2, 'thdot_init': -0.2}
     seed = None  # Note that if init_state is given, seed is overriden.
 
     env = AdjustablePendulumEnv(render_mode='human',  # None,
@@ -39,10 +39,10 @@ def pendulum_experiment():
 
     # Define MPC
     Q = 2 * np.identity(2)
-    R = 2 * np.array([[1]])
-    R_delta = np.array([[1]])
+    R = 0.01 * np.array([[1]])
+    R_delta = 0.01 * np.array([[1]])
     gamma = -1
-    horizon = 10
+    horizon = 5
     state_dim = 2
     action_dim = 1
     mpc = RiskSensitiveMPC(gamma, horizon, state_dim, action_dim, Q, R, R_delta)
@@ -55,7 +55,7 @@ def pendulum_experiment():
         mpc.dynamics.gpr_err[i].set_lambdas([2., 2., 2.])
     mpc.dynamics.append_train_data(states, actions, next_states)
 
-    sim = Simulator(mpc, env, num_iters=10)
+    sim = Simulator(mpc, env, num_iters=50)
     sim.run()
 
     # os.environ['CUDA_LAUNCH_BLOCKING'] = '1'  # To show real time spent on .time()
