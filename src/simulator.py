@@ -35,3 +35,5 @@ class Simulator(object):
 
             self.mpc.dynamics.append_train_data(obs, action, next_obs)
             obs = next_obs
+
+        self.env.close()

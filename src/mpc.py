@@ -289,7 +289,8 @@ class RiskSensitiveMPC:
                 return np.zeros((self.horizon, self.input_dim))
 
         self.curr_state = torch.tensor(curr_state, device=self.device).type(torch.float64)
-        x0 = self.last_traj
+        x0 = np.zeros(shape=len(self.last_traj))
+        # x0 = self.last_traj  Setting x0 to be last optimal trajectory can cause local minima issues
 
         expanded_lb = self.horizon * self.lb
         expanded_ub = self.horizon * self.ub

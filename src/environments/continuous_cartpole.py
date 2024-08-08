@@ -68,8 +68,12 @@ class ContinuousCartPoleEnv(gym.Env):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
-    def stepPhysics(self, force):
-        x, x_dot, theta, theta_dot = self.state
+    def stepPhysics(self, force, state=None):
+        if state is None:
+            x, x_dot, theta, theta_dot = self.state
+        else:
+            x, x_dot, theta, theta_dot = state
+
         costheta = math.cos(theta)
         sintheta = math.sin(theta)
         temp = (force + self.polemass_length * theta_dot * theta_dot * sintheta) / self.total_mass
@@ -83,8 +87,10 @@ class ContinuousCartPoleEnv(gym.Env):
         return (x, x_dot, theta, theta_dot)
 
     def step(self, action):
-        assert self.action_space.contains(action), \
-            "%r (%s) invalid" % (action, type(action))
+        # assert self.action_space.contains(action), \
+        #     "%r (%s) invalid" % (action, type(action))
+        assert action > -1 and action < 1
+
         # Cast action to float to strip np trappings
         force = self.force_mag * float(action)
         self.state = self.stepPhysics(force)
@@ -120,9 +126,9 @@ class ContinuousCartPoleEnv(gym.Env):
 #        return np.array(self.state), reward, done, {}
 
     def reset(self):
-        self.state = self.np_random.uniform(low=-0.05, high=0.05, size=(4,))
+        self.state = self.np_random.uniform(low=-0.2, high=0.2, size=(4,))
         self.steps_beyond_done = None
-        return np.array(self.state)
+        return np.array(self.state), None
 
     def render(self, mode='human'):
         try:
