@@ -7,6 +7,8 @@ import cProfile
 import torch
 import matplotlib.pyplot as plt
 
+PATH = 'C:/Users/thiag/Git/gaussian-process-mpc/src/experiments/data'
+
 
 def uncertainty_experiment():
     """
@@ -19,30 +21,30 @@ def uncertainty_experiment():
         return s + a
 
     # Box interval 1
-    num_train_1 = 200
-    x_min_1 = 3.8
-    x_max_1 = 4.2
-    y_min_1 = -4.2
-    y_max_1 = 0.2
-    statex_1 = np.random.uniform(x_min_1, x_max_1, num_train_1)[:, None]
-    statey_1 = np.random.uniform(y_min_1, y_max_1, num_train_1)[:, None]
-    actionx_1 = np.random.uniform(a_min, a_max, num_train_1)[:, None]
-    actiony_1 = np.random.uniform(a_min, a_max, num_train_1)[:, None]
-    states_1 = np.concatenate((statex_1, statey_1), axis=1)
-    actions_1 = np.concatenate((actionx_1, actiony_1), axis=1)
+    # num_train_1 = 200
+    # x_min_1 = 3.8
+    # x_max_1 = 4.2
+    # y_min_1 = -4.2
+    # y_max_1 = 0.2
+    # statex_1 = np.random.uniform(x_min_1, x_max_1, num_train_1)[:, None]
+    # statey_1 = np.random.uniform(y_min_1, y_max_1, num_train_1)[:, None]
+    # actionx_1 = np.random.uniform(a_min, a_max, num_train_1)[:, None]
+    # actiony_1 = np.random.uniform(a_min, a_max, num_train_1)[:, None]
+    # states_1 = np.concatenate((statex_1, statey_1), axis=1)
+    # actions_1 = np.concatenate((actionx_1, actiony_1), axis=1)
 
     # Box interval 2
-    num_train_2 = 200
-    x_min_2 = -0.2
-    x_max_2 = 4.2
-    y_min_2 = -0.2
-    y_max_2 = 0.2
-    statex_2 = np.random.uniform(x_min_2, x_max_2, num_train_2)[:, None]
-    statey_2 = np.random.uniform(y_min_2, y_max_2, num_train_2)[:, None]
-    actionx_2 = np.random.uniform(a_min, a_max, num_train_2)[:, None]
-    actiony_2 = np.random.uniform(a_min, a_max, num_train_2)[:, None]
-    states_2 = np.concatenate((statex_2, statey_2), axis=1)
-    actions_2 = np.concatenate((actionx_2, actiony_2), axis=1)
+    # num_train_2 = 200
+    # x_min_2 = -0.2
+    # x_max_2 = 4.2
+    # y_min_2 = -0.2
+    # y_max_2 = 0.2
+    # statex_2 = np.random.uniform(x_min_2, x_max_2, num_train_2)[:, None]
+    # statey_2 = np.random.uniform(y_min_2, y_max_2, num_train_2)[:, None]
+    # actionx_2 = np.random.uniform(a_min, a_max, num_train_2)[:, None]
+    # actiony_2 = np.random.uniform(a_min, a_max, num_train_2)[:, None]
+    # states_2 = np.concatenate((statex_2, statey_2), axis=1)
+    # actions_2 = np.concatenate((actionx_2, actiony_2), axis=1)
 
     # Box interval 3
     # num_train_3 = 100
@@ -70,14 +72,24 @@ def uncertainty_experiment():
     # states_else = np.concatenate((statex_else, statey_else), axis=1)
     # actions_else = np.concatenate((actionx_else, actiony_else), axis=1)
 
-    states = np.concatenate((states_1, states_2), axis=0)
-    actions = np.concatenate((actions_1, actions_2), axis=0)
-    next_states = f(states, actions)
+    # states = np.concatenate((states_1, states_2), axis=0)
+    # actions = np.concatenate((actions_1, actions_2), axis=0)
+    # next_states = f(states, actions)
+
+    # Save data
+    # np.save(os.path.join(PATH, 'states'), states)
+    # np.save(os.path.join(PATH, 'actions'), actions)
+    # np.save(os.path.join(PATH, 'next_states'), next_states)
+
+    # Load data
+    states = np.load(os.path.join(PATH, 'states.npy'))
+    actions = np.load(os.path.join(PATH, 'actions.npy'))
+    next_states = np.load(os.path.join(PATH, 'next_states.npy'))
 
     Q = 2 * np.identity(2)
     R = np.zeros(shape=(2, 2))
     R_delta = None
-    gamma = 1e-5  # Negative gamma is risk-averse, positive gamma is risk-seeking
+    gamma = -1  # Negative gamma is risk-averse, positive gamma is risk-seeking
     horizon = 6
     state_dim = 2
     action_dim = 2
