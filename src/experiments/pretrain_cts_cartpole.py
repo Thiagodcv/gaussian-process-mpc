@@ -13,9 +13,9 @@ def cts_cartpole_experiment():
     # Create training data
     num_train = 300
     x = np.random.uniform(-2.4, 2.4, size=num_train)
-    xdot = np.random.uniform(-5, 5, size=num_train)
-    theta = np.random.uniform(-np.pi/2, np.pi/2, size=num_train)
-    thetadot = np.random.uniform(-5, 5, size=num_train)
+    xdot = np.random.uniform(-2, 2, size=num_train)
+    theta = np.random.uniform(-np.pi/4, np.pi/4, size=num_train)  # Instead of doing [-pi/2, pi/2]
+    thetadot = np.random.uniform(-2, 2, size=num_train)
     states = np.concatenate((x[:, None], xdot[:, None], theta[:, None], thetadot[:, None]), axis=1)
     actions = np.random.uniform(-1, 1, size=num_train)[:, None]
     next_states = np.zeros(shape=states.shape)
@@ -30,7 +30,7 @@ def cts_cartpole_experiment():
     R = 0.01 * np.array([[1]])
     R_delta = None
     gamma = -1
-    horizon = 10
+    horizon = 5
     state_dim = 4
     action_dim = 1
     mpc = RiskSensitiveMPC(gamma, horizon, state_dim, action_dim, Q, R, R_delta)
