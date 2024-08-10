@@ -106,6 +106,13 @@ def uncertainty_experiment():
     u = torch.as_tensor(opt_traj.reshape(horizon, action_dim), device=mpc.device).type(torch.float64)
     state_means, state_covars = mpc.dynamics.forward_propagate_torch(horizon, mpc.curr_state, u)
 
+    # Get actual trajectory in state space
+    state_real = np.zeros(shape=(horizon+1, state_dim))
+    state_real[0, :] = curr_state
+    for i in range(horizon):
+        state_real[i+1, :] = f(state_real[i, :], opt_traj[i, :])
+
+
     # Plot Trajectory on state space
     plt.style.use('ggplot')
     fig, ax = plt.subplots()
@@ -117,6 +124,7 @@ def uncertainty_experiment():
                marker='o', s=300, linewidths=2)
     for i in range(len(state_means)):
         ax.scatter(state_means[i][0].item(), state_means[i][1].item(), color='blue')
+        ax.scatter(state_real[i, 0].item(), state_real[i, 1].item(), color='black')
     plt.text(0 - 0.4, 0 + 0.3, 'Set Point', fontsize=15)
     plt.text(4, -4 - 0.4, 'Initial State', fontsize=15)
     plt.show()
