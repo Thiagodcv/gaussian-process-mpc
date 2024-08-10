@@ -8,7 +8,8 @@ import torch
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 
-PATH = 'C:/Users/thiag/Git/gaussian-process-mpc/src/experiments/data'
+DATA_PATH = 'C:/Users/thiag/Git/gaussian-process-mpc/src/experiments/data'
+MEDIA_PATH = 'C:/Users/thiag/Git/gaussian-process-mpc/src/experiments/media/uncertainty'
 
 
 def uncertainty_experiment():
@@ -83,9 +84,9 @@ def uncertainty_experiment():
     # np.save(os.path.join(PATH, 'next_states'), next_states)
 
     # Load data
-    states = np.load(os.path.join(PATH, 'states.npy'))
-    actions = np.load(os.path.join(PATH, 'actions.npy'))
-    next_states = np.load(os.path.join(PATH, 'next_states.npy'))
+    states = np.load(os.path.join(DATA_PATH, 'states.npy'))
+    actions = np.load(os.path.join(DATA_PATH, 'actions.npy'))
+    next_states = np.load(os.path.join(DATA_PATH, 'next_states.npy'))
 
     Q = 2 * np.identity(2)
     R = np.zeros(shape=(2, 2))
@@ -171,7 +172,8 @@ def uncertainty_experiment():
     plt.title('Optimal MPC Trajectory with {}={}'.format(gam_code, gamma))
     plt.xlabel('State Dimension 1')
     plt.ylabel('State Dimension 2')
-    plt.show()
+    plt.savefig(os.path.join(MEDIA_PATH, 'gamma_{}.png'.format(gamma)))
+    # plt.show()
 
 
 if __name__ == '__main__':
