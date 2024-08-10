@@ -6,6 +6,7 @@ import os
 import cProfile
 import torch
 import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
 
 PATH = 'C:/Users/thiag/Git/gaussian-process-mpc/src/experiments/data'
 
@@ -130,15 +131,47 @@ def uncertainty_experiment():
     fig, ax = plt.subplots()
     plt.xlim(-1, 5)
     plt.ylim(-5, 1)
-    ax.scatter(states[:, 0], states[:, 1])
-    ax.scatter(0, 0, color='white', edgecolor='black', marker='*', s=400, linewidths=2)
+    ax.scatter(states[:, 0], states[:, 1], label='Training Data', alpha=0.5)
+    ax.scatter(0, 0, color='white', edgecolor='black', marker='*', s=400, linewidths=1)
     ax.scatter(curr_state[0], curr_state[1], color='white', edgecolor='black',
-               marker='o', s=300, linewidths=2)
-    for i in range(len(state_means)):
-        ax.scatter(state_means[i][0].item(), state_means[i][1].item(), color='blue')
-        ax.scatter(state_real[i, 0].item(), state_real[i, 1].item(), color='black')
-    plt.text(0 - 0.4, 0 + 0.3, 'Set Point', fontsize=15)
-    plt.text(4, -4 - 0.4, 'Initial State', fontsize=15)
+               marker='o', s=300, linewidths=1)
+
+    # Expected trajectory
+    ax.scatter([state_means[i][0].item() for i in range(len(state_means))],
+               [state_means[i][1].item() for i in range(len(state_means))],
+               color='blue', label='Expected Trajectory')
+
+    # True trajectory
+    ax.scatter([state_real[i, 0].item() for i in range(len(state_means))],
+               [state_real[i, 1].item() for i in range(len(state_means))],
+               color='black', label='True Trajectory')
+
+    # Add legend handle for set point and initial state
+    handles, labels = plt.gca().get_legend_handles_labels()
+
+    # Handle for Set Point
+    sp_legend_handle = mlines.Line2D([], [], color='white', marker='*',
+                                     markersize=10, label='Set Point', linestyle='None',
+                                     markeredgewidth=1, markeredgecolor='black')
+    handles.append(sp_legend_handle)
+    labels.append('Set Point')
+
+    # Handle for Initial State
+    is_legend_handle = mlines.Line2D([], [], color='white', marker='o',
+                                     markersize=8, label='Initial State', linestyle='None',
+                                     markeredgewidth=1, markeredgecolor='black')
+    handles.append(is_legend_handle)
+    labels.append('Initial State')
+
+    # Add handles to legend
+    plt.legend(handles=handles, labels=labels)
+
+    # plt.text(0 - 0.4, 0 + 0.3, 'Set Point', fontsize=15)
+    # plt.text(4, -4 - 0.4, 'Initial State', fontsize=15)
+    gam_code = '\u03B3'
+    plt.title('Optimal MPC Trajectory with {}={:.0f}'.format(gam_code, gamma))
+    plt.xlabel('State Dimension 1')
+    plt.ylabel('State Dimension 2')
     plt.show()
 
 
