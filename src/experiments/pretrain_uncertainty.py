@@ -125,7 +125,6 @@ def uncertainty_experiment():
     for i in range(horizon):
         state_real[i+1, :] = f(state_real[i, :], opt_traj[i, :])
 
-
     # Plot Trajectory on state space
     plt.style.use('ggplot')
     fig, ax = plt.subplots()
@@ -169,7 +168,7 @@ def uncertainty_experiment():
     # plt.text(0 - 0.4, 0 + 0.3, 'Set Point', fontsize=15)
     # plt.text(4, -4 - 0.4, 'Initial State', fontsize=15)
     gam_code = '\u03B3'
-    plt.title('Optimal MPC Trajectory with {}={:.0f}'.format(gam_code, gamma))
+    plt.title('Optimal MPC Trajectory with {}={}'.format(gam_code, gamma))
     plt.xlabel('State Dimension 1')
     plt.ylabel('State Dimension 2')
     plt.show()
