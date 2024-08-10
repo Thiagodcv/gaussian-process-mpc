@@ -20,9 +20,9 @@ def uncertainty_experiment():
 
     # Box interval 1
     num_train_1 = 200
-    x_min_1 = 1.8
-    x_max_1 = 2.2
-    y_min_1 = -2.2
+    x_min_1 = 3.8
+    x_max_1 = 4.2
+    y_min_1 = -4.2
     y_max_1 = 0.2
     statex_1 = np.random.uniform(x_min_1, x_max_1, num_train_1)[:, None]
     statey_1 = np.random.uniform(y_min_1, y_max_1, num_train_1)[:, None]
@@ -34,7 +34,7 @@ def uncertainty_experiment():
     # Box interval 2
     num_train_2 = 200
     x_min_2 = -0.2
-    x_max_2 = 2.2
+    x_max_2 = 4.2
     y_min_2 = -0.2
     y_max_2 = 0.2
     statex_2 = np.random.uniform(x_min_2, x_max_2, num_train_2)[:, None]
@@ -77,8 +77,8 @@ def uncertainty_experiment():
     Q = 2 * np.identity(2)
     R = np.zeros(shape=(2, 2))
     R_delta = None
-    gamma = -5  # Negative gamma is risk-averse, positive gamma is risk-seeking
-    horizon = 5
+    gamma = 1e-5  # Negative gamma is risk-averse, positive gamma is risk-seeking
+    horizon = 6
     state_dim = 2
     action_dim = 2
     mpc = RiskSensitiveMPC(gamma, horizon, state_dim, action_dim, Q, R, R_delta)
@@ -86,31 +86,31 @@ def uncertainty_experiment():
     for i in range(state_dim):
         mpc.dynamics.gpr_err[i].set_sigma_n(1e-5)  # Recall method doesn't automatically make Ky get rebuilt
         mpc.dynamics.gpr_err[i].set_lambdas([0.5, 0.5, 0.5, 0.5])
-        # mpc.dynamics.gpr_err[i].set_sigma_f(3.)
+        mpc.dynamics.gpr_err[i].set_sigma_f(1.)
 
     mpc.dynamics.append_train_data(states, actions, next_states)
     mpc.set_ub([a_max, a_max])
     mpc.set_lb([a_min, a_min])
     mpc.set_xref(np.array([0., 0.]))
     mpc.set_uref(np.array([0., 0.]))
-    curr_state = np.array([2, -2])
+    curr_state = np.array([4, -4])
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     mpc.curr_state = torch.tensor(curr_state, device=device).type(torch.float64)
+    mpc.gamma = gamma
 
-    # Compute cost at minimizing trajectory when curr_state = [1, -3]
+    # Compute cost at minimizing trajectory when curr_state = [4, -4]
     opt_traj = mpc.get_optimal_trajectory(curr_state)
-    print(opt_traj)
+    print("Optimal input: ", opt_traj)
 
     # Get expected trajectory in state space
     u = torch.as_tensor(opt_traj.reshape(horizon, action_dim), device=mpc.device).type(torch.float64)
     state_means, state_covars = mpc.dynamics.forward_propagate_torch(horizon, mpc.curr_state, u)
-    print(state_means)
 
     # Plot Trajectory on state space
     plt.style.use('ggplot')
     fig, ax = plt.subplots()
-    plt.xlim(-1, 3)
-    plt.ylim(-3, 1)
+    plt.xlim(-1, 5)
+    plt.ylim(-5, 1)
     ax.scatter(states[:, 0], states[:, 1])
     ax.scatter(0, 0, color='white', edgecolor='black', marker='*', s=400, linewidths=2)
     ax.scatter(curr_state[0], curr_state[1], color='white', edgecolor='black',
@@ -118,7 +118,7 @@ def uncertainty_experiment():
     for i in range(len(state_means)):
         ax.scatter(state_means[i][0].item(), state_means[i][1].item(), color='blue')
     plt.text(0 - 0.4, 0 + 0.3, 'Set Point', fontsize=15)
-    plt.text(2, -2 - 0.4, 'Initial State', fontsize=15)
+    plt.text(4, -4 - 0.4, 'Initial State', fontsize=15)
     plt.show()
 
 
