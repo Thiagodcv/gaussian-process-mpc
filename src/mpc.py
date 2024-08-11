@@ -310,7 +310,7 @@ class RiskSensitiveMPC:
         # nlp.add_option('limited_memory_update_type', 'bfgs')
 
         # Trying to loosen convergence constraints to converge earlier... doesn't really seem to help
-        # nlp.add_option('max_iter', 10)  # default 3000
+        nlp.add_option('max_iter', 300)  # default 3000
         nlp.add_option('tol', 1e-4)  # default 1e-8
         nlp.add_option('acceptable_tol', 1e-4)  # default 1e-6
         nlp.add_option('constr_viol_tol', 1e-4)  # default 1e-8

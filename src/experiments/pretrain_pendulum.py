@@ -55,9 +55,7 @@ def pendulum_experiment():
         mpc.dynamics.gpr_err[i].set_lambdas([2., 2., 2.])
     mpc.dynamics.append_train_data(states, actions, next_states)
 
-    sim = Simulator(mpc, env, num_iters=200, record=True,
-                    video_folder='C:/Users/thiag/Git/gaussian-process-mpc/src/experiments/media/pendulum',
-                    name_prefix='pend-video3')
+    sim = Simulator(mpc, env, num_iters=200)
     sim.run()
 
     # os.environ['CUDA_LAUNCH_BLOCKING'] = '1'  # To show real time spent on .time()

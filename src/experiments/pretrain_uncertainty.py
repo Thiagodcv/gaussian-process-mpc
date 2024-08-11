@@ -8,8 +8,8 @@ import torch
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 
-DATA_PATH = 'C:/Users/thiag/Git/gaussian-process-mpc/src/experiments/data'
-MEDIA_PATH = 'C:/Users/thiag/Git/gaussian-process-mpc/src/experiments/media/uncertainty'
+DATA_PATH = ''
+MEDIA_PATH = ''
 
 
 def uncertainty_experiment():
