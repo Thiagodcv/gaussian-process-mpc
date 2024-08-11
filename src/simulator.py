@@ -4,7 +4,8 @@ import numpy as np
 
 class Simulator(object):
     """
-    Class with methods for simulating a GP-MPC setup in the given environment. Comes with recording functionality.
+    Class with methods for simulating a GP-MPC setup in the given environment. Comes with recording functionality for
+    classic gym environments.
     """
 
     def __init__(self, mpc, env, num_iters=500, record=False, video_folder=None, name_prefix=None):
