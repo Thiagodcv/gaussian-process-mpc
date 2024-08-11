@@ -1,7 +1,6 @@
 from unittest import TestCase
 import numpy as np
 import torch
-import GPy
 from src.tools.uncertainty_prop import (mean_prop, mean_prop_mc,
                                         variance_prop, variance_prop_mc,
                                         covariance_prop, covariance_prop_mc,
