@@ -3,7 +3,7 @@ import time
 import numpy as np
 from src.gpr import GaussianProcessRegression
 import torch
-import scipy.linalg.blas as blas
+# import scipy.linalg.blas as blas
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 
@@ -70,6 +70,8 @@ class TestGaussianProcessRegression(TestCase):
 
     def test_pytorch_mat_mult(self):
         """
+        NOTE: Removed scipy import. Need to install to run the BLAS portion of this test.
+
         Test how long matrix multiplication takes using Torch + GPU, NumPy, and SciPy.blas.
 
         For multiplying two (10_000, 10_000) matrices, cuda+torch on average takes 0.8s (after first multiply)
@@ -97,16 +99,16 @@ class TestGaussianProcessRegression(TestCase):
             b = time.time()
             print('Numpy on CPU {:.02e}s'.format(b - a))
 
-        A_blas = np.array(A_np, order='F')
-        B_blas = np.array(B_np, order='F')
-
-        for i in range(3):
-            a = time.time()
-            C_blas = blas.sgemm(alpha=1., a=A_blas, b=B_blas)
-            b = time.time()
-            print('SciPy blas on CPU {:.02e}s'.format(b - a))
-
-        self.assertTrue(np.linalg.norm(C_np - C_blas) < 1e-5)
+        # A_blas = np.array(A_np, order='F')
+        # B_blas = np.array(B_np, order='F')
+        #
+        # for i in range(3):
+        #     a = time.time()
+        #     C_blas = blas.sgemm(alpha=1., a=A_blas, b=B_blas)
+        #     b = time.time()
+        #     print('SciPy blas on CPU {:.02e}s'.format(b - a))
+        #
+        # self.assertTrue(np.linalg.norm(C_np - C_blas) < 1e-5)
 
     def test_partition_inverse_formula(self):
         """

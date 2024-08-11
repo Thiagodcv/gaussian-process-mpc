@@ -1,7 +1,6 @@
 from unittest import TestCase
 import cyipopt
 import numpy as np
-import scipy
 
 
 class TestIPOPT(TestCase):
