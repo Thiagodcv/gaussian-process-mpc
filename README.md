@@ -8,8 +8,8 @@ closer to training data, where we have a more accurate estimate of the dynamics 
 however, is associated with the controller intentionally choosing a trajectory far away from where training
 data has been sampled on the state-action space. More information can be found at [1] and [2].
 
-<img src="./src/experiments/media/uncertainty/gamma_1e-05.png" width="200">
-<img src="./src/experiments/media/uncertainty/gamma_-1.png" width="200">
+<img src="./src/experiments/media/uncertainty/gamma_1e-05.png" width="400">
+<img src="./src/experiments/media/uncertainty/gamma_-1.png" width="400">
 
 Below I briefly list some important details concerning my implementation.
 * In order to solve for trajectories which minimize the risk-sensitive cost, I use the IPOPT solver using the Python interface cyipopt.
