@@ -1,6 +1,17 @@
 # Gaussian Process Model Predictive Control using PyTorch
-This repository is a WIP implementation of an MPC controller which computes an optimal trajectory using a dynamics model estimated using Gaussian Process Regression (GPR). This MPC is capable of risk-averse
-and risk-seeking behaviour by utilizing the fact that variance estimates of future states can be retrieved using GPR. 
+This repository is a WIP implementation of an MPC controller which computes an optimal trajectory using a dynamics model
+estimated using Gaussian Process Regression (GPR). This MPC is capable of risk-averse and risk-seeking behaviour by 
+utilizing the fact that variance estimates of future states can be retrieved using GPR. The degree of risk-aversion is 
+controlled by the parameter γ, with the controller becoming more risk-averse as γ becomes more negative, and more 
+risk-seeking as γ becomes more positive. Risk-averse behaviour is associated with the controller choosing a trajectory
+closer to training data, where we have a more accurate estimate of the dynamics function. Risk-seeking behaviour 
+however, is associated with the controller intentionally choosing a trajectory far away from where training
+data has been sampled on the state-action space. More information can be found at [1] and [2].
+
+<p float="left">
+    <img src="./src/experiments/media/uncertainty/gamma_1e-05.png" width="400">
+    <img src="./src/experiments/media/uncertainty/gamma_-1.png" width="400">
+</p>
 
 Below I briefly list some important details concerning my implementation.
 * In order to solve for trajectories which minimize the risk-sensitive cost, I use the IPOPT solver using the Python interface cyipopt.
