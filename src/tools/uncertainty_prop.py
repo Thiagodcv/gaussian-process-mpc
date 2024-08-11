@@ -1,6 +1,5 @@
 import numpy as np
 import scipy
-import numba
 import warnings
 import torch
 
