@@ -28,10 +28,10 @@ def pendulum_experiment():
     g = options['g']
     max_speed = options['max_speed']
     max_torque = options['max_torque']
-    init_state = {'th_init': -1/2, 'thdot_init': -0.2}
+    init_state = {'th_init': 1, 'thdot_init': 0.5}
     seed = None  # Note that if init_state is given, seed is overriden.
 
-    env = AdjustablePendulumEnv(render_mode='human',  # None,
+    env = AdjustablePendulumEnv(render_mode='human',
                                 g=g,
                                 max_speed=max_speed,
                                 max_torque=max_torque,
@@ -55,7 +55,7 @@ def pendulum_experiment():
         mpc.dynamics.gpr_err[i].set_lambdas([2., 2., 2.])
     mpc.dynamics.append_train_data(states, actions, next_states)
 
-    sim = Simulator(mpc, env, num_iters=50)
+    sim = Simulator(mpc, env, num_iters=200)
     sim.run()
 
     # os.environ['CUDA_LAUNCH_BLOCKING'] = '1'  # To show real time spent on .time()
