@@ -31,7 +31,7 @@ def pendulum_experiment():
     init_state = {'th_init': 1, 'thdot_init': 0.5}
     seed = None  # Note that if init_state is given, seed is overriden.
 
-    env = AdjustablePendulumEnv(render_mode='rgb_array',
+    env = AdjustablePendulumEnv(render_mode='human',
                                 g=g,
                                 max_speed=max_speed,
                                 max_torque=max_torque,
