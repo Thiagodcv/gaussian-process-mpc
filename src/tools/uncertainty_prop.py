@@ -1,6 +1,4 @@
 import numpy as np
-import scipy
-import numba
 import warnings
 import torch
 
@@ -33,7 +31,7 @@ def mean_prop(K, Lambda, u, S, X_train, y_train):
     dict
         Dictionary containing beta and l (equation 31)
     """
-    beta = scipy.linalg.solve(K, y_train, assume_a='pos')
+    beta = np.linalg.solve(K, y_train)
     Lambda_inv = np.linalg.inv(Lambda)
     S_Lambda_inv = np.linalg.inv(S + Lambda)
     l = np.zeros(beta.shape[0])

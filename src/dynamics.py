@@ -62,6 +62,7 @@ class Dynamics(object):
     def forward_propagate(self, horizon, curr_state, actions):
         """
         TODO: nominal models aren't taken into account here. Try to see if this can be remedied.
+        TODO: Unlike torch version, this can't handle sigma_f!=1. Torch version is faster anyways.
         Given `horizon` number of actions, compute the expected states and state covariances.
         Note that because this method only takes actions as arguments (and not states), this method
         corresponds to a shooting method.
@@ -78,7 +79,6 @@ class Dynamics(object):
         state_covars[0, :, :] = 1e-3 * np.identity(self.state_dim)
 
         X_train = self.gpr_err[0].X_train.cpu().detach().numpy()
-        y_train = self.gpr_err[0].y_train.cpu().detach().numpy()
 
         for t in range(1, horizon + 1):
             print("Timestep: ", t)
@@ -96,6 +96,7 @@ class Dynamics(object):
                 # compute means for each state dimension
                 Ky = self.gpr_err[s_dim].Ky.cpu().detach().numpy()
                 lambda_mat = np.diag(self.gpr_err[s_dim].get_lambdas())
+                y_train = self.gpr_err[s_dim].y_train.cpu().detach().numpy()
 
                 state_means[t, s_dim] = mean_prop(Ky, lambda_mat, mean, covar, X_train, y_train.squeeze())[0]
 
@@ -103,27 +104,27 @@ class Dynamics(object):
                 state_covars[t, s_dim, s_dim] = variance_prop(Ky, lambda_mat, mean, covar, X_train, y_train.squeeze())
 
             # Find lower diagonal covariances
-            for i in range(1, self.state_dim):
-                for j in range(i):  # i not i-1
-                    Ky_i = self.gpr_err[i].Ky.cpu().detach().numpy()
-                    lambda_mat_i = np.diag(self.gpr_err[i].get_lambdas())
-
-                    Ky_j = self.gpr_err[j].Ky.cpu().detach().numpy()
-                    lambda_mat_j = np.diag(self.gpr_err[j].get_lambdas())
-
-                    # compute covariances between different state dimensions
-                    state_covars[t, i, j] = covariance_prop(Ky_i, Ky_j,
-                                                            lambda_mat_i, lambda_mat_j,
-                                                            mean, covar, X_train, y_train.squeeze())
+            # TODO: Commented this part out since might be broken, and forward_prop_torch doesn't use covariance anyways
+            # for i in range(1, self.state_dim):
+            #     for j in range(i):  # i not i-1
+            #         Ky_i = self.gpr_err[i].Ky.cpu().detach().numpy()
+            #         lambda_mat_i = np.diag(self.gpr_err[i].get_lambdas())
+            #
+            #         Ky_j = self.gpr_err[j].Ky.cpu().detach().numpy()
+            #         lambda_mat_j = np.diag(self.gpr_err[j].get_lambdas())
+            #
+            #         # compute covariances between different state dimensions
+            #         state_covars[t, i, j] = covariance_prop(Ky_i, Ky_j,
+            #                                                 lambda_mat_i, lambda_mat_j,
+            #                                                 mean, covar, X_train, y_train.squeeze())
 
             # Copy values from lower diagonal to upper diagonal
-            state_covars[t, :, :] += state_covars[t, :, :].T - np.diag(np.diag(state_covars[t, :, :]))
+            # state_covars[t, :, :] += state_covars[t, :, :].T - np.diag(np.diag(state_covars[t, :, :]))
 
         return state_means, state_covars
 
     def forward_propagate_torch(self, horizon, curr_state, actions):
         """
-        TODO: nominal models aren't taken into account here. Try to see if this can be remedied.
         TODO: Figure out why CUDA runs out of memory for large num_train.
         TODO: Figure out why covariance_prop_torch is much slower than for variance_prop_torch.
         Given `horizon` number of actions, compute the expected states and state covariances.
