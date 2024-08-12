@@ -78,9 +78,10 @@ class TestGaussianProcessRegression(TestCase):
         numpy on average takes 8.2s, and blas on average takes 6s. Tiny bit of numerical discrepancy between numpy
         and blas.
         """
-
-        A = torch.normal(mean=0, std=1, size=(10_000, 10_000), device='cuda')
-        B = torch.normal(mean=0, std=1, size=(10_000, 10_000), device='cuda')
+        # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda:0")
+        A = torch.normal(mean=0, std=1, size=(10_000, 10_000), device=device)
+        B = torch.normal(mean=0, std=1, size=(10_000, 10_000), device=device)
 
         for i in range(5):
             torch.cuda.synchronize()
