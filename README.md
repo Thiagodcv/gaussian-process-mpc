@@ -18,7 +18,14 @@ Below I briefly list some important details concerning my implementation.
 * This code implements a shooting-method controller. Box constraints are only possible on the input variables, not on the states.
 * Although the function for computing the covariance between state dimensions is fully implemented, the MPC setup as of now only looks at the variance of state dimensions. This is to reduce runtime.
 * So far, I've only got the MPC to run on classic GPR. A sparsified implementation may come later. 
+* Note that the IPOPT solver sometimes takes long to converge to a solution. I suspect this problem may be solved by switching to the collocation method as done in [1], or by using a solver which isn't IPOPT. 
 
+## Installation
+conda env create -f environment.yml
+
+conda activate gp-mpc-env
+
+pip install torch --index-url ht<span>tps://download.pytorch.org/whl/cu118
 
 ## Citations
 [1] Yang, Xiaoke, and Jan Maciejowski. "Risk-sensitive model predictive control with Gaussian process models." IFAC-PapersOnLine 48.28 (2015): 374-379.
