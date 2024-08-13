@@ -25,7 +25,7 @@ conda env create -f environment.yml
 
 conda activate gp-mpc-env
 
-pip install torch --index-url ht<span>tps://download.pytorch.org/whl/cu118
+pip install torch --index-url https://download.pytorch.org/whl/cu118
 
 ## Citations
 [1] Yang, Xiaoke, and Jan Maciejowski. "Risk-sensitive model predictive control with Gaussian process models." IFAC-PapersOnLine 48.28 (2015): 374-379.
